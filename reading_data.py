@@ -10,9 +10,9 @@ from mbanalysis import ir
 def read_GW_file(NiGWh5_path):
     with h5py.File(NiGWh5_path, 'r') as f:
         mu = f['iter1/mu'][()]
-        G_tau = f['iter1/G_tau/data'][()]
-        sigma_1 = f['iter1/Sigma1'][()]
-        selfenergy = f['iter1/Selfenergy/data'][()]
+        G_tau = f['iter' + str(it) + '/G_tau/data'][()].view(complex)
+        sigma_1 = f['iter' + str(it) + '/Sigma1'][()]
+        selfenergy = f['iter' + str(it) + '/Selfenergy/data'][()]
     return(mu , G_tau ,sigma_1, selfenergy)
 
 def read_H_k(inputh5_path):
@@ -20,11 +20,18 @@ def read_H_k(inputh5_path):
         H_k = f['HF/H-k'][()]
     return(H_k)
 
-def fourierr_transform(selfenergy,ir_f ):
+def fourierr_transform(selfenergy,ir_f,inputh5_path,tau_grid_path):
     with h5py.File(inputh5_path, 'r') as f:
-        ir_file = '../tests/test_data/ir_grid/1e4_104.h5'
+        ir_file = tau_grid_path
         it = f["iter"][()]
         tau_mesh = f["iter" + str(it) + "/G_tau/mesh"][()]
+    beta = tau_mesh[-1]
+    nts = tau_mesh.shape[0]
+    my_ir = ir.IR_factory(beta, ir_file)
+    selfenergy_iw = my_ir.tau_to_w(selfenergy)
+    return(G_iw)
+
+def 
 
 
 
