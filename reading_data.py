@@ -4,7 +4,16 @@ import scipy
 import matplotlib.pyplot as plt
 import scipy.constants
 import h5py
+# from green-mbtools import mbanalysis
 from mbanalysis import ir
+# import sys
+# import os
+# current_dir = os.path.dirname('/home/orit/VS_codes/green-mbtools/')
+# subfolder_path = os.path.join(current_dir, 'mbanalysis')
+# sys.path.append(subfolder_path)
+# import ir
+
+
 
 
 def read_GW_file(NiGWh5_path):
@@ -40,7 +49,6 @@ def fourier_transform(selfenergy,ir_f,inputh5_path,tau_grid_path):
 
 if __name__ == '__main__':
     tau_grid_path = '/home/orit/VS_codes/Data/1e5.h5'
-    beta = tau_mesh[-1]
     inputh5_path = '/home/orit/VS_codes/Data/1e5.h5'
     mu , G_tau ,sigma_1 , selefnergy = read_GW_file(inputh5_path)
     H_k = read_H_k(inputh5_path)
