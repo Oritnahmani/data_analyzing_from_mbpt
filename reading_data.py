@@ -20,7 +20,7 @@ def read_H_k(inputh5_path):
         H_k = f['HF/H-k'][()]
     return(H_k)
 
-def fourierr_transform(selfenergy,ir_f,inputh5_path,tau_grid_path):
+def fourier_transform(selfenergy,ir_f,inputh5_path,tau_grid_path):
     with h5py.File(inputh5_path, 'r') as f:
         ir_file = tau_grid_path
         it = f["iter"][()]
@@ -31,7 +31,7 @@ def fourierr_transform(selfenergy,ir_f,inputh5_path,tau_grid_path):
     selfenergy_iw = my_ir.tau_to_w(selfenergy)
     return(G_iw)
 
-def 
+# def 
 
 
 
@@ -39,8 +39,9 @@ def
 
 
 if __name__ == '__main__':
-    ir_file = '../tests/test_data/ir_grid/1e4_104.h5'
+    tau_grid_path = '/home/orit/VS_codes/Data/1e5.h5'
     beta = tau_mesh[-1]
-    inputh5_path = '/home/orit//green_fun/data_analyzing_from_mbpt/input.h5'
-    # mu , G_tau ,sigma_1 , selefnergy = read_GW_file('/home/orit/VS_codes/Analysis_GW/green-mbtools/examples/NiO_GW.h5')
+    inputh5_path = '/home/orit/VS_codes/Data/1e5.h5'
+    mu , G_tau ,sigma_1 , selefnergy = read_GW_file(inputh5_path)
     H_k = read_H_k(inputh5_path)
+    G_iw = fourier_transform(selfenergy,ir_f,inputh5_path,tau_grid_path)
