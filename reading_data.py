@@ -41,7 +41,8 @@ def fourier_transform(selfenergy,inputh5_path,tau_grid_path):
     selfenergy_iw = my_ir.tau_to_w(selfenergy)
     return(selfenergy_iw)
 
-# def 
+# def dyson_omega_to_green(selfenergy_iw, ):
+
 
 
 
