@@ -44,13 +44,16 @@ def fourier_transform(selfenergy,inputh5_path,tau_grid_path):
 def dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path):
     my_ir = ir.IR_factory(beta, tau_grid_path)
     omegas = my_ir.wsample
-    G_w_inverse = np.empty_like(selfenergy_iw[0])
-    print(G_w_inverse)
+    # G_w_inverse = np.empty_like(selfenergy_iw[0])
+    # print(G_w_inverse)
     G_w = np.empty_like(selfenergy_iw[0])
 
     for i in range(selfenergy_iw.shape[0]):
-        G_w_inverse[i] = -selfenergy_iw[0][i]
-        G_w[i] = (G_w_inverse[i])**(-1)
+        for j in range(selfenergy_iw.shape[1]):
+            for k in range(selfenergy_iw.shape[2]):
+               for l in range(selfenergy_iw.shape[3]): 
+                    G_w[i][j][k][l] =( -selfenergy_iw[i][j][k][l])**(-1)
+
 
 
 
