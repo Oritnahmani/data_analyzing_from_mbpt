@@ -32,16 +32,26 @@ def read_GW_file(inputh5_path):
 
 def fourier_transform(selfenergy,inputh5_path,tau_grid_path):
     with h5py.File(inputh5_path, 'r') as f:
-        ir_file = tau_grid_path
+        # ir_file = tau_grid_path
         it = f["iter"][()]
         tau_mesh = f["iter" + str(it) + "/G_tau/mesh"][()]
     beta = tau_mesh[-1]
     nts = tau_mesh.shape[0]
-    my_ir = ir.IR_factory(beta, ir_file)
+    my_ir = ir.IR_factory(beta, tau_grid_path)
     selfenergy_iw = my_ir.tau_to_w(selfenergy)
-    return(selfenergy_iw)
+    return(beta, selfenergy_iw)
 
-# def dyson_omega_to_green(selfenergy_iw, ):
+def dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path):
+    my_ir = ir.IR_factory(beta, tau_grid_path)
+    omegas = my_ir.wsample
+    G_w_inverse = np.empty_like(selfenergy_iw[0])
+    print(G_w_inverse)
+    G_w = np.empty_like(selfenergy_iw[0])
+
+    for i in range(selfenergy_iw.shape[0]):
+        G_w_inverse[i] = -selfenergy_iw[0][i]
+        G_w[i] = (G_w_inverse[i])**(-1)
+
 
 
 
@@ -55,5 +65,7 @@ if __name__ == '__main__':
     # mu = read_GW_file(inputh5_path)
 
     mu , G_tau ,sigma_1 , selfenergy = read_GW_file(inputh5_path)
+    # my_ir = ir.IR_factory(beta, tau_grid_path)
     # H_k = read_H_k(inputh5_path)
-    selfenergy_iw = fourier_transform(selfenergy,inputh5_path,tau_grid_path)
+    beta, selfenergy_iw = fourier_transform(selfenergy,inputh5_path,tau_grid_path)
+    dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path)
