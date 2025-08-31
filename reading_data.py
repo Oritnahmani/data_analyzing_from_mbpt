@@ -17,8 +17,9 @@ from mbanalysis import ir
 
 def read_GW_file(inputh5_path):
     with h5py.File(inputh5_path, 'r') as f:
-        mu = f['iter1/mu'][()]
         it = f["iter"][()]
+
+        mu = f['iter' + str(it) + '/mu'][()]
         G_tau = f['iter' + str(it) + '/G_tau/data'][()].view(complex)
         sigma_1 = f['iter' + str(it) + '/Sigma1'][()]
         selfenergy = f['iter' + str(it) + '/Selfenergy/data'][()]
@@ -48,11 +49,11 @@ def dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path):
     # print(G_w_inverse)
     G_w = np.empty_like(selfenergy_iw[0])
 
-    for i in range(selfenergy_iw.shape[0]):
+    for omega in range(selfenergy_iw.shape[0]):
         for j in range(selfenergy_iw.shape[1]):
             for k in range(selfenergy_iw.shape[2]):
                for l in range(selfenergy_iw.shape[3]): 
-                    G_w[i][j][k][l] =( -selfenergy_iw[i][j][k][l])**(-1)
+                    G_w[omega][j][k][l] =( -selfenergy_iw[omega][j][k][l])**(-1)
 
 
 
@@ -64,11 +65,11 @@ def dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path):
 
 if __name__ == '__main__':
     tau_grid_path = '/home/orit/VS_codes/Data/1e5.h5'
-    inputh5_path = '/home/orit/wolfgang_gcohenlabstorage/oritnahmani/runs/NiO/Sergei_benchmark_beta100_GPU/mbpt_with_mixining_6/NiO_GW.h5'
+    inputh5_path = '/home/orit/VS_codes/green-mbtools/tests/test_data/H2_GW/sim.h5'
     # mu = read_GW_file(inputh5_path)
 
     mu , G_tau ,sigma_1 , selfenergy = read_GW_file(inputh5_path)
     # my_ir = ir.IR_factory(beta, tau_grid_path)
     # H_k = read_H_k(inputh5_path)
     beta, selfenergy_iw = fourier_transform(selfenergy,inputh5_path,tau_grid_path)
-    dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path)
+    # dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path)
