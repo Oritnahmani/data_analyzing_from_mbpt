@@ -52,9 +52,7 @@ def dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path):
     for omega in range(selfenergy_iw.shape[0]):
         for j in range(selfenergy_iw.shape[1]):
             for k in range(selfenergy_iw.shape[2]):
-               for l in range(selfenergy_iw.shape[3]): 
-                    G_w[omega][j][k][l] =( -selfenergy_iw[omega][j][k][l])**(-1)
-
+                    G_w[omega][j][k] =np.linalg.inv( -selfenergy_iw[omega][j][k])
 
 
 
