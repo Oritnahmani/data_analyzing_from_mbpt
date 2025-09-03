@@ -22,7 +22,8 @@ def read_GW_file(inputh5_path):
         mu = f['iter' + str(it) + '/mu'][()]
         G_tau = f['iter' + str(it) + '/G_tau/data'][()].view(complex)
         sigma_1 = f['iter' + str(it) + '/Sigma1'][()]
-        selfenergy = f['iter' + str(it) + '/Selfenergy/data'][()]
+        selfenergy = f['iter' + str(it) + '/Selfenergy/data'][()].view(complex)
+        print(selfenergy.shape())
     return(mu , G_tau ,sigma_1, selfenergy)
     # return(mu)
 
@@ -52,7 +53,7 @@ def dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path):
     for omega in range(selfenergy_iw.shape[0]):
         for j in range(selfenergy_iw.shape[1]):
             for k in range(selfenergy_iw.shape[2]):
-                    G_w[omega][j][k] =np.linalg.inv( -selfenergy_iw[omega][j][k])
+                    G_w[omega][j][k] =np.linalg.inv(-selfenergy_iw[omega][j][k])
 
 
 
