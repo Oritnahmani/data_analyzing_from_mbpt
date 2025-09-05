@@ -23,7 +23,7 @@ def read_GW_file(inputh5_path):
         G_tau = f['iter' + str(it) + '/G_tau/data'][()].view(complex)
         sigma_1 = f['iter' + str(it) + '/Sigma1'][()]
         selfenergy = f['iter' + str(it) + '/Selfenergy/data'][()].view(complex)
-        print(selfenergy.shape())
+        print(selfenergy.shape)
     return(mu , G_tau ,sigma_1, selfenergy)
     # return(mu)
 
@@ -63,7 +63,7 @@ def dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path):
 
 
 if __name__ == '__main__':
-    tau_grid_path = '/home/orit/VS_codes/Data/1e5.h5'
+    tau_grid_path = '/home/orit/VS_codes/Data/1e4.h5'
     inputh5_path = '/home/orit/VS_codes/green-mbtools/tests/test_data/H2_GW/sim.h5'
     # mu = read_GW_file(inputh5_path)
 
