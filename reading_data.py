@@ -71,4 +71,4 @@ if __name__ == '__main__':
     # my_ir = ir.IR_factory(beta, tau_grid_path)
     # H_k = read_H_k(inputh5_path)
     beta, selfenergy_iw = fourier_transform(selfenergy,inputh5_path,tau_grid_path)
-    # dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path)
+    dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path)
