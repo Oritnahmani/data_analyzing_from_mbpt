@@ -47,14 +47,14 @@ def dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path):
     omegas = my_ir.wsample
     # G_w_inverse = np.empty_like(selfenergy_iw[0])
     # print(G_w_inverse)
-    G_w = np.empty_like(selfenergy_iw[0])
+    G_w = np.empty_like(selfenergy_iw)
 
     for omega in range(selfenergy_iw.shape[0]):
         for j in range(selfenergy_iw.shape[1]):
             for k in range(selfenergy_iw.shape[2]):
-                    print(G_w[omega].shape)
-                    print(selfenergy_iw[omega].shape)
-                    G_w[omega][j][k] =np.linalg.inv(-selfenergy_iw[omega][j][k])
+                print(G_w.shape)
+                print(selfenergy_iw.shape)
+                G_w[omega][j][k] =np.linalg.inv(-selfenergy_iw[omega][j][k])
 
 
 
