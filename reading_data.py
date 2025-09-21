@@ -4,6 +4,7 @@ import scipy
 import matplotlib.pyplot as plt
 import scipy.constants
 import h5py
+from green_mbtools.pesto import mb
 from mbanalysis import ir
 # import sys
 # import os
@@ -26,13 +27,13 @@ def read_GW_file(inputh5_path):
     return(mu , G_tau ,sigma_1, selfenergy)
     # return(mu)
 
-# def read_H_k(inputh5_path):
-#     with h5py.File(inputh5_path, 'r') as f:
-#         H_k = f['HF/H-k'][()]
-#     return(H_k)
-
-def fourier_transform(selfenergy,inputh5_path,tau_grid_path):
+def read_H_k(inputh5_path):
     with h5py.File(inputh5_path, 'r') as f:
+        H_k = f['HF/H-k'][()]
+    return(H_k)
+
+def fourier_transform(selfenergy,GW_result_path,tau_grid_path):
+    with h5py.File(GW_result_path, 'r') as f:
         # ir_file = tau_grid_path
         it = f["iter"][()]
         tau_mesh = f["iter" + str(it) + "/G_tau/mesh"][()]
@@ -69,8 +70,8 @@ if __name__ == '__main__':
     inputh5_path = '/home/orit/VS_codes/green-mbtools/tests/test_data/H2_GW/input.h5'
     # mu = read_GW_file(inputh5_path)
 
-    mu , G_tau ,sigma_1 , selfenergy = read_GW_file(inputh5_path)
+    mu , G_tau ,sigma_1 , selfenergy = read_GW_file(GW_result_path)
     # my_ir = ir.IR_factory(beta, tau_grid_path)
     # H_k = read_H_k(inputh5_path)
-    beta, selfenergy_iw = fourier_transform(selfenergy,inputh5_path,tau_grid_path)
+    beta, selfenergy_iw = fourier_transform(selfenergy,GW_result_path,tau_grid_path)
     dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path)
