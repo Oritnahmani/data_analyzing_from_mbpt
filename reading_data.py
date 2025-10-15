@@ -6,24 +6,27 @@ import scipy.constants
 import h5py
 from green_mbtools.pesto import mb
 from mbanalysis import ir
-# import sys
-# import os
 # current_dir = os.path.dirname('/home/orit/VS_codes/green-mbtools/')
 # subfolder_path = os.path.join(current_dir, 'mbanalysis')
 # sys.path.append(subfolder_path)
-# import ir
-
-
 
 
 def read_GW_file(inputh5_path):
     with h5py.File(inputh5_path, 'r') as f:
+        ir_list = f["/grid/ir_list"][()]
+        weight = f["/grid/weight"][()]
+        index = f["/grid/index"][()]
+        conj_list = f["grid/conj_list"][()]
         it = f["iter"][()]
 
-        mu = f['iter' + str(it) + '/mu'][()]
-        G_tau = f['iter' + str(it) + '/G_tau/data'][()].view(complex)
-        sigma_1 = f['iter' + str(it) + '/Sigma1'][()]
-        selfenergy = f['iter' + str(it) + '/Selfenergy/data'][()].view(complex)
+        mur = f['iter' + str(it) + '/mu'][()]
+        G_taur = f['iter' + str(it) + '/G_tau/data'][()].view(complex)
+        sigma_1r = f['iter' + str(it) + '/Sigma1'][()]
+        selfenergyr = f['iter' + str(it) + '/Selfenergy/data'][()].view(complex)
+        mu = mur
+        G_tau = G_taur
+        sigma_1 = mb.to_full_bz(sigma_1r, conj_list, ir_list, index, 1)
+        selfenergy = selfenergyr
     return(mu , G_tau ,sigma_1, selfenergy)
     # return(mu)
 
@@ -65,13 +68,13 @@ def dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path):
 
 
 if __name__ == '__main__':
-    tau_grid_path = '/home/orit/VS_codes/green-mbtools/tests/test_data/ir_grid/1e4.h5'
-    GW_result_path = '/home/orit/VS_codes/green-mbtools/tests/test_data/H2_GW/sim.h5'
-    inputh5_path = '/home/orit/VS_codes/green-mbtools/tests/test_data/H2_GW/input.h5'
+    tau_grid_path = '/home/orit/VS_codes1/green-mbtools/tests/test_data/ir_grid/1e4.h5'
+    GW_result_path = '/home/orit/VS_codes1/green-mbtools/tests/test_data/H2_GW/sim.h5'
+    inputh5_path = '/home/orit/VS_codes1/green-mbtools/tests/test_data/H2_GW/input.h5'
     # mu = read_GW_file(inputh5_path)
 
     mu , G_tau ,sigma_1 , selfenergy = read_GW_file(GW_result_path)
-    # my_ir = ir.IR_factory(beta, tau_grid_path)
+    
     # H_k = read_H_k(inputh5_path)
-    beta, selfenergy_iw = fourier_transform(selfenergy,GW_result_path,tau_grid_path)
-    dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path)
+    # beta, selfenergy_iw = fourier_transform(selfenergy,GW_result_path,tau_grid_path)
+    # dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path)
