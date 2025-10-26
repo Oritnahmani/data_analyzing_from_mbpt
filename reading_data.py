@@ -11,8 +11,8 @@ from mbanalysis import ir
 # sys.path.append(subfolder_path)
 
 
-def read_GW_file(inputh5_path):
-    with h5py.File(inputh5_path, 'r') as f:
+def read_GW_file(sim_h5):
+    with h5py.File(sim_h5, 'r') as f:
         ir_list = f["/grid/ir_list"][()]
         weight = f["/grid/weight"][()]
         index = f["/grid/index"][()]
