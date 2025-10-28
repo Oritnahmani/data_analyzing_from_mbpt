@@ -12,13 +12,13 @@ from mbanalysis import ir
 
 
 def read_GW_file(sim_h5):
-    with h5py.File(sim_h5, 'r') as f:
+    with h5py.File(inputh5_path, 'r') as f:
         ir_list = f["/grid/ir_list"][()]
         weight = f["/grid/weight"][()]
         index = f["/grid/index"][()]
         conj_list = f["grid/conj_list"][()]
+    with h5py.File(sim_h5, 'r') as f:
         it = f["iter"][()]
-
         mur = f['iter' + str(it) + '/mu'][()]
         G_taur = f['iter' + str(it) + '/G_tau/data'][()].view(complex)
         sigma_1r = f['iter' + str(it) + '/Sigma1'][()]
