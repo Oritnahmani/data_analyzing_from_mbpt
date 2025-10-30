@@ -1,3 +1,8 @@
+import os
+os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("MKL_NUM_THREADS", "4")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "4")
+os.environ.pop("SLURM_JOB_CPUS_PER_NODE", None)
 import numpy as np
 import itertools
 import scipy
@@ -33,7 +38,8 @@ def read_GW_file(sim_h5):
 def read_H_k(inputh5_path):
     with h5py.File(inputh5_path, 'r') as f:
         H_k = f['HF/H-k'][()]
-    return(H_k)
+        S_k = f['HF/S-k'][()]
+    return(H_k, S_k)
 
 def fourier_transform(selfenergy,GW_result_path,tau_grid_path):
     with h5py.File(GW_result_path, 'r') as f:
