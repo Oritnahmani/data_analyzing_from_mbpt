@@ -52,7 +52,7 @@ def fourier_transform(selfenergy,GW_result_path,tau_grid_path):
     selfenergy_iw = my_ir.tau_to_w(selfenergy)
     return(beta, selfenergy_iw)
 
-def dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path):
+def dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path,H_k,S_k):
     my_ir = ir.IR_factory(beta, tau_grid_path)
     omegas = my_ir.wsample
     # G_w_inverse = np.empty_like(selfenergy_iw[0])
@@ -64,8 +64,9 @@ def dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path):
             for k in range(selfenergy_iw.shape[2]):
                 print(G_w.shape)
                 print(selfenergy_iw.shape)
-                G_w[omega][j][k] =np.linalg.inv(-selfenergy_iw[omega][j][k])
-
+                G_w[omega][j][k] =np.linalg.inv(-selfenergy_iw[omega][j][k] + np.linalg.inv((H_k + S_k)))
+    G_tau = my_ir.w_to_tau(G_w)
+    return(G_tau)
 
 
 
@@ -80,7 +81,7 @@ if __name__ == '__main__':
     # mu = read_GW_file(inputh5_path)
 
     mu , G_tau ,sigma_1 , selfenergy = read_GW_file(GW_result_path)
-    
-    # H_k = read_H_k(inputh5_path)
-    # beta, selfenergy_iw = fourier_transform(selfenergy,GW_result_path,tau_grid_path)
-    # dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path)
+
+    H_k,S_k = read_H_k(inputh5_path)
+    beta, selfenergy_iw = fourier_transform(selfenergy,GW_result_path,tau_grid_path)
+    dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path, H_k,S_k )
