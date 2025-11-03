@@ -37,8 +37,8 @@ def read_GW_file(sim_h5):
 
 def read_H_k(inputh5_path):
     with h5py.File(inputh5_path, 'r') as f:
-        H_k = f['HF/H-k'][()]
-        S_k = f['HF/S-k'][()]
+        H_k = f['HF/H-k'][()].view(complex)
+        S_k = f['HF/S-k'][()].view(complex)
     return(H_k, S_k)
 
 def fourier_transform(selfenergy,GW_result_path,tau_grid_path):
@@ -58,13 +58,14 @@ def dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path,H_k,S_k):
     # G_w_inverse = np.empty_like(selfenergy_iw[0])
     # print(G_w_inverse)
     G_w = np.empty_like(selfenergy_iw)
-
+    print(H_k[0][0])
     for omega in range(selfenergy_iw.shape[0]):
-        for j in range(selfenergy_iw.shape[1]):
-            for k in range(selfenergy_iw.shape[2]):
-                print(G_w.shape)
-                print(selfenergy_iw.shape)
-                G_w[omega][j][k] =np.linalg.inv(-selfenergy_iw[omega][j][k] + np.linalg.inv((H_k + S_k)))
+        # for j in range(selfenergy_iw.shape[2]):
+        #     for k in range(selfenergy_iw.shape[3]):
+        #         print(selfenergy_iw[omega][0][0])
+                # print(H_k[0][0])
+
+        G_w[omega,0,0,:,:] =np.linalg.inv(-selfenergy_iw[omega,0,0,:,:] + np.linalg.inv((H_k[0,0,:,:] + S_k[0,0,:,:])))
     G_tau = my_ir.w_to_tau(G_w)
     return(G_tau)
 
