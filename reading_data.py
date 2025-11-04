@@ -37,8 +37,12 @@ def read_GW_file(sim_h5):
 
 def read_H_k(inputh5_path):
     with h5py.File(inputh5_path, 'r') as f:
-        H_k = f['HF/H-k'][()].view(complex)
-        S_k = f['HF/S-k'][()].view(complex)
+        H_k = f['HF/H-k'][()].view(np.complex128)
+        S_k = f['HF/S-k'][()].view(np.complex128)
+    if H_k.shape[-1] == 1:
+        H_k = H_k[..., 0]
+    if S_k.shape[-1] == 1:
+        S_k = S_k[..., 0]
     return(H_k, S_k)
 
 def fourier_transform(selfenergy,GW_result_path,tau_grid_path):
@@ -85,4 +89,5 @@ if __name__ == '__main__':
 
     H_k,S_k = read_H_k(inputh5_path)
     beta, selfenergy_iw = fourier_transform(selfenergy,GW_result_path,tau_grid_path)
-    dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path, H_k,S_k )
+    G_tau = dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path, H_k,S_k )
+    print(G_tau)
