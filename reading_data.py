@@ -11,9 +11,7 @@ import scipy.constants
 import h5py
 from green_mbtools.pesto import mb
 from mbanalysis import ir
-# current_dir = os.path.dirname('/home/orit/VS_codes/green-mbtools/')
-# subfolder_path = os.path.join(current_dir, 'mbanalysis')
-# sys.path.append(subfolder_path)
+
 
 
 def read_GW_file(sim_h5):
@@ -38,8 +36,8 @@ def read_GW_file(sim_h5):
 
 def read_H_k(inputh5_path):
     with h5py.File(inputh5_path, 'r') as f:
-        H_k = f['HF/H-k'][()].view(np.complex128)
-        S_k = f['HF/S-k'][()].view(np.complex128)
+        H_k = f['HF/H-k'][()].view(complex)
+        S_k = f['HF/S-k'][()].view(complex)
     if H_k.shape[-1] == 1:
         H_k = H_k[..., 0]
     if S_k.shape[-1] == 1:
