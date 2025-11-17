@@ -55,7 +55,7 @@ def fourier_transform(selfenergy,GW_result_path,tau_grid_path):
     selfenergy_iw = my_ir.tau_to_w(selfenergy)
     return(beta, selfenergy_iw)
 
-def dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path,H_k,S_k,mu):
+def dyson_omega_to_green(beta, selfenergy_iw, sigma_1, tau_grid_path,H_k,S_k,mu):
     my_ir = ir.IR_factory(beta, tau_grid_path)
     # G_w_inverse = np.empty_like(selfenergy_iw[0])
     # print(G_w_inverse)
@@ -64,7 +64,7 @@ def dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path,H_k,S_k,mu):
         for l in range(selfenergy_iw.shape[1]):
             for k in range(selfenergy_iw.shape[2]):
 
-                G_w[omega,l,k,:,:] =np.linalg.inv(-selfenergy_iw[omega,l,k,:,:] + H_k[l,k,:,:] + (1j * omega + mu) * S_k[l,k,:,:])
+                G_w[omega,l,k,:,:] =np.linalg.inv(-selfenergy_iw[omega,l,k,:,:] -  sigma_1[l,k,:,:] - H_k[l,k,:,:] + (1j * my_ir.wsample[omega] + mu) * S_k[l,k,:,:])
         # G_w[omega,0,0,:,:] =np.linalg.inv(-selfenergy_iw[omega,0,0,:,:] + (H_k[0,0,:,:] + S_k[0,0,:,:]))
 
     G_tau_dyson = my_ir.w_to_tau(G_w)
@@ -86,16 +86,17 @@ if __name__ == '__main__':
 
     H_k,S_k = read_H_k(inputh5_path)
     beta, selfenergy_iw = fourier_transform(selfenergy,GW_result_path,tau_grid_path)
-    G_tau_dyson = dyson_omega_to_green(beta, selfenergy_iw, tau_grid_path, H_k, S_k, mu)
+    G_tau_dyson = dyson_omega_to_green(beta, selfenergy_iw, sigma_1, tau_grid_path, H_k, S_k, mu)
 
 
     G_diff = np.zeros(tau.shape[0])
     for i in range(tau.shape[0]):
         G_diff[i] = np.max(np.abs(G_tau[i, 0, 0, :, :] - G_tau_dyson[i, 0, 0, :, :]))
     plt.plot (tau, G_diff) 
-    plt.savefig('G_diff.png')   
-    plt.plot(tau, G_tau[:,0,0,0,0].view(complex),  label='G_tau from GW')
-    plt.plot(tau, G_tau_dyson[:,0,0,0,0].view(complex), label='G_tau from Dyson')
+    plt.savefig('G_diff.png') 
+    plt.clf()  
+    plt.plot(tau, G_tau[:,0,0,0,0].real,  label='G_tau from GW')
+    plt.plot(tau, G_tau_dyson[:,0,0,0,0].real, label='G_tau from Dyson')
     plt.legend()
     plt.savefig('G_tau_comparison.png')
  
