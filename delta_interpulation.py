@@ -23,7 +23,14 @@ def read_delta_tau_from_txt(delta_file,t_arr,number_of_orbitals):
 
 def interpolation(tau_original, delta_tau_original, tau_new):
     beta = tau_original[-1]
-    
+    new_delta_tau = np.zeros((len(tau_new), delta_tau_original.shape[1], delta_tau_original.shape[2]), dtype=complex)
+    for i in range(delta_tau_original.shape[1]):
+        for j in range(delta_tau_original.shape[2]):
+            real_interp = scipy.interpolate.interp1d(tau_original, delta_tau_original[:, i, j].real, kind='cubic', fill_value="extrapolate")
+            imag_interp = scipy.interpolate.interp1d(tau_original, delta_tau_original[:, i, j].imag, kind='cubic', fill_value="extrapolate")
+            new_delta_tau[:, i, j] = real_interp(tau_new) + 1j * imag_interp(tau_new)
+    return new_delta_tau
+
 
 def fourier_transform(delta_tau, tau, beta):
     my_ir = ir.IR_factory(beta, None)
