@@ -7,6 +7,8 @@ import h5py
 from green_mbtools.pesto import mb
 from mbanalysis import ir
 
+from data_analyzing_from_mbpt.Dyson_eq_analytical import G_tau
+
 def read_delta_tau_from_txt(delta_file,t_arr,number_of_orbitals):
     delta_tau = np.zeros((t_arr.shape[0],number_of_orbitals, number_of_orbitals), dtype=complex)
     with open(delta_file) as k:
@@ -32,10 +34,15 @@ def interpolation(tau_original, delta_tau_original, tau_new):
     return new_delta_tau
 
 
-def fourier_transform(delta_tau, tau, beta):
+def fourier_transform(new_delta_tau, tau, beta,green_tau):
     my_ir = ir.IR_factory(beta, None)
-    delta_ir_coeffs = my_ir.tau_to_ir(delta_tau, tau)
+    # tau = ir.tau_mesh              # length ir.nts
+    # mask = tau <= 10.0
+
+    # delta_ir_coeffs = my_ir.tau_to_ir(new_delta_tau, tau)
     delta_omega = my_ir.ir_to_w(delta_ir_coeffs)
+
+
     return delta_omega
 
 
