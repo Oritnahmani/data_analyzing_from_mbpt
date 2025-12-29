@@ -70,16 +70,7 @@ def dyson_omega_to_green(beta, selfenergy_iw, sigma_1, tau_grid_path,H_k,S_k,mu)
     return(G_tau_dyson)
 
 
-def dyson_green_to_sigma_with_delta(beta, selfenergy_iw, sigma_1, tau_grid_path,H_k,S_k,mu, delta_omega):
-    my_ir = ir.IR_factory(beta, tau_grid_path)
-    G_w = np.empty_like(selfenergy_iw)
-    for omega in range(selfenergy_iw.shape[0]):
-        for l in range(selfenergy_iw.shape[1]):
-            for k in range(selfenergy_iw.shape[2]):
-                selfenergy_iw[omega,l,k,:,:] = - np.linalg.inv(G_w[omega,l,k,:,:]) - H_k[l,k,:,:] + (1j * my_ir.wsample[omega] + mu) * S_k[l,k,:,:] - delta_omega[omega,l,k,:,:]
-                # G_w[omega,l,k,:,:] =np.linalg.inv(-selfenergy_iw[omega,l,k,:,:] -  sigma_1[l,k,:,:] - H_k[l,k,:,:] + (1j * my_ir.wsample[omega] + mu) * S_k[l,k,:,:] + delta_omega[omega,l,k,:,:])
-    G_tau_dyson = my_ir.w_to_tau(G_w)
-    return(G_tau_dyson)
+
 
 
 
