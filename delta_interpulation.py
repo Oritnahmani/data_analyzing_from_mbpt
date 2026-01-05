@@ -1,13 +1,13 @@
+import argparse
+import time
+import re
+from pathlib import Path
 import numpy as np
-import itertools
-import scipy
-import matplotlib.pyplot as plt
-import scipy.constants
+import scipy.interpolate
 import h5py
 from green_mbtools.pesto import mb
 from mbanalysis import ir
-from data_analyzing_from_mbpt.Dyson_eq_analytical import read_H_k
-from inchworm_stuff.redaing_txt import read_greenfunction_from_txt, read_delta_tau_from_txt
+from inchworm_stuff.redaing_txt import read_greenfunction_from_txt, read_delta_tau_from_txt, read_hopping_from_txt
 
 def read_mu(NiO_GW_h5,inputh5_path):
     with h5py.File(inputh5_path, 'r') as f:
@@ -33,47 +33,147 @@ def interpolation(tau_original, delta_tau_original, tau_new):
     return new_delta_tau
 
 
-def read_g_tau_from_txt(g_tau_file):
-    g_tau = []
-    with open(g_tau_file) as f:
-        for line in f:
-            if line.startswith("#"):
-                continue
-            g_tau.append(np.array([float(x) for x in line.split()]))
-    return np.array(g_tau)
+
+# def read_g_tau_from_txt(g_tau_file):
+#     g_tau = []
+#     with open(g_tau_file) as f:
+#         for line in f:
+#             if line.startswith("#"):
+#                 continue
+#             g_tau.append(np.array([float(x) for x in line.split()]))
+#     return np.array(g_tau)
 
 
-def fourier_transform(new_delta_tau, beta,green_tau):
+def fourier_transform(new_delta_tau, beta,green_tau, ir_grid_path):
     my_ir = ir.IR_factory(beta, ir_grid_path)
-    print("ir tau_mesh shape:", my_ir.tau_mesh.shape)
     delta_omega = my_ir.tau_to_w(new_delta_tau)
     green_omega = my_ir.tau_to_w(green_tau)
     return delta_omega, green_omega
 
 
-def dyson_green_to_sigma_with_delta(beta, selfenergy_iw, sigma_1, ir_grid_path,H_k,S_k,mu, delta_omega):
+def dyson_green_to_sigma_with_delta(beta, green_omega,number_of_orbitals, ir_grid_path,mu, delta_omega,hopping):
+    selfenergy_iw = np.zeros((green_omega.shape[0], number_of_orbitals, number_of_orbitals), dtype=complex)
     my_ir = ir.IR_factory(beta, ir_grid_path)
-    G_w = np.empty_like(selfenergy_iw)
-    for omega in range(selfenergy_iw.shape[0]):
-        for l in range(selfenergy_iw.shape[1]):
-            for k in range(selfenergy_iw.shape[2]):
-                selfenergy_iw[omega,l,k,:,:] = - np.linalg.inv(G_w[omega,l,k,:,:]) - H_k[l,k,:,:] + (1j * my_ir.wsample[omega] + mu) * S_k[l,k,:,:] - delta_omega[omega,l,k,:,:]
-                # G_w[omega,l,k,:,:] =np.linalg.inv(-selfenergy_iw[omega,l,k,:,:] -  sigma_1[l,k,:,:] - H_k[l,k,:,:] + (1j * my_ir.wsample[omega] + mu) * S_k[l,k,:,:] + delta_omega[omega,l,k,:,:])
-    G_tau_dyson = my_ir.w_to_tau(G_w)
-    return(G_tau_dyson)
+    for omega in range(green_omega.shape[0]):
+        selfenergy_iw[omega,:,:] = - np.linalg.inv(green_omega[omega,:,:]) - hopping + (1j * my_ir.wsample[omega] + mu) * np.eye(number_of_orbitals) - delta_omega[omega,:,:]
+    return(selfenergy_iw)
 
-if __name__ == '__main__':
-    beta = 100.0
-    number_of_orbitals = 4
-    NiO_GW_h5 = '/home/orit/VS_codes1/NiO_GW_iter14.h5'
-    inputh5_path = '/home/orit/VS_codes1/input.h5'
-    time_filename = '/home/orit/VS_codes1/data_analyzing_from_mbpt/time_intervals.txt'
-    ir_grid_path = '/home/orit/VS_codes1/data_analyzing_from_mbpt/1e5.h5'
-    delta_file = '/home/orit/VS_codes1/example/delta.txt'
-    mu, sigma_1 = read_mu(NiO_GW_h5,inputh5_path)
-    green_tau, t_arr = read_greenfunction_from_txt(number_of_orbitals, time_filename)
-    delta_tau = read_delta_tau_from_txt(delta_file, t_arr, number_of_orbitals)
+
+
+
+def snapshot(path: Path):
+    st = path.stat()
+    return (st.st_size, st.st_mtime_ns)
+
+def wait_for_files(files, poll_s=5.0, stable_checks=2, stable_interval_s=2.0):
+    """
+    Wait until all files exist and don't change across stable_checks snapshots.
+    Also require non-empty.
+    """
+    files = [Path(f) for f in files]
+    while True:
+        if all(f.exists() and f.stat().st_size > 0 for f in files):
+            # stability check
+            ok = True
+            last = [snapshot(f) for f in files]
+            for _ in range(stable_checks):
+                time.sleep(stable_interval_s)
+                cur = [snapshot(f) for f in files]
+                if cur != last:
+                    ok = False
+                    break
+                last = cur
+            if ok:
+                return
+        time.sleep(poll_s)
+
+def find_g_files(run_dir: Path, orbitals: int, g_glob: str):
+    """
+    Returns list of expected Green's function files to wait for.
+    Example g_glob: 'G_{i}_{j}.txt' or 'G_{i}_{j}'.
+    """
+    expected = []
+    for i in range(orbitals):
+        for j in range(orbitals):
+            name = g_glob.format(i=i, j=j)
+            expected.append(run_dir / name)
+    return expected
+
+
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Wait for inchworm G files, then compute selfenergy_iw.")
+    ap.add_argument("--run-dir", default=".", help="Directory where inchworm output files are located.")
+    ap.add_argument("--beta", type=float, required=True)
+    ap.add_argument("--orbitals", type=int, required=True)
+    ap.add_argument("--time-intervals", default="time_intervals.txt", help="Path (relative to run-dir) for time_intervals.txt")
+    ap.add_argument("--delta-file", default="delta.txt", help="Path (relative to run-dir) for delta.txt")
+    ap.add_argument("--hopping-file", default="hopping.txt", help="Path (relative to run-dir) for hopping.txt")
+
+    # Mu inputs (these are in your original script; make them arguments so it works on cluster)
+    ap.add_argument("--nio-gw-h5", required=True, help="Path to NiO_GW_iter*.h5")
+    ap.add_argument("--input-h5", required=True, help="Path to input.h5 (grid info)")
+    ap.add_argument("--ir-grid", required=True, help="Path to IR grid h5 file, e.g. 1e5.h5")
+
+    # Green naming
+    ap.add_argument("--g-pattern", default="G_{i}_{j}.txt",
+                    help='Expected file name pattern for Green outputs. Use {i} and {j}, e.g. "G_{i}_{j}.txt"')
+
+    # Output
+    ap.add_argument("--out-npy", default="selfenergy_iw.npy", help="Output numpy file (saved in run-dir).")
+    args = ap.parse_args()
+
+    run_dir = Path(args.run_dir).resolve()
+
+    # 1) Wait until ALL G_{i}_{j} files exist & stable
+    g_files = find_g_files(run_dir, args.orbitals, args.g_pattern)
+    print(f"[watch] Waiting for {len(g_files)} Green files like: {run_dir / args.g_pattern.format(i=0,j=0)}")
+    wait_for_files(g_files, poll_s=5.0, stable_checks=2, stable_interval_s=2.0)
+    print("[watch] Green files present and stable.")
+
+    # 2) Compute selfenergy
+    mu, sigma_1 = read_mu(args.nio_gw_h5, args.input_h5)
+
+    time_filename = run_dir / args.time_intervals
+    delta_file = run_dir / args.delta_file
+    hopping_file = run_dir / args.hopping_file
+
+    green_tau, t_arr = read_greenfunction_from_txt(args.orbitals, str(time_filename), str(run_dir))
+    delta_tau = read_delta_tau_from_txt(str(delta_file), t_arr, args.orbitals)
+
     new_delta_tau = interpolation(t_arr, delta_tau, t_arr)
-    delta_omega, green_omega = fourier_transform(new_delta_tau, beta, green_tau)
-    H_k,S_k = read_H_k(inputh5_path)
-    dyson_green_to_sigma_with_delta(beta, green_omega, sigma_1, ir_grid_path,H_k,S_k,mu, delta_omega)
+    delta_omega, green_omega, my_ir = fourier_transform(args.beta, args.ir_grid, new_delta_tau, green_tau)
+
+    hopping = read_hopping_from_txt(str(hopping_file), args.orbitals)
+    selfenergy_iw = dyson_green_to_sigma_with_delta(
+        args.beta, green_omega, args.orbitals, mu, delta_omega, hopping, my_ir
+    )
+
+    out_path = run_dir / args.out_npy
+    np.save(out_path, selfenergy_iw)
+    print(f"[save] {out_path}  shape={selfenergy_iw.shape} dtype={selfenergy_iw.dtype}")
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+# if __name__ == '__main__':
+#     beta = 100.0
+#     number_of_orbitals = 4
+#     NiO_GW_h5 = '/home/orit/VS_codes1/NiO_GW_iter14.h5'
+#     inputh5_path = '/home/orit/VS_codes1/input.h5'
+#     time_filename = '/home/orit/VS_codes1/data_analyzing_from_mbpt/time_intervals.txt'
+#     ir_grid_path = '/home/orit/VS_codes1/data_analyzing_from_mbpt/1e5.h5'
+#     delta_file = '/home/orit/VS_codes1/example/delta.txt'
+#     hopping_file = '/home/orit/VS_codes1/example/hopping.txt'
+#     mu, sigma_1 = read_mu(NiO_GW_h5,inputh5_path)
+#     green_tau, t_arr = read_greenfunction_from_txt(number_of_orbitals, time_filename,'/home/orit/VS_codes1/example')
+#     delta_tau = read_delta_tau_from_txt(delta_file, t_arr, number_of_orbitals)
+#     new_delta_tau = interpolation(t_arr, delta_tau, t_arr)
+#     delta_omega, green_omega = fourier_transform(new_delta_tau, beta, green_tau)
+#     hopping = read_hopping_from_txt(hopping_file, number_of_orbitals)
+#     selfenergy_iw = dyson_green_to_sigma_with_delta(beta, green_omega, number_of_orbitals, ir_grid_path, mu, delta_omega, hopping)

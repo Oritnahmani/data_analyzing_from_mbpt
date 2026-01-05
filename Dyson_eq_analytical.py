@@ -72,9 +72,6 @@ def dyson_omega_to_green(beta, selfenergy_iw, sigma_1, tau_grid_path,H_k,S_k,mu)
 
 
 
-
-
-
 if __name__ == '__main__':
     tau_grid_path = '/home/orit/VS_codes1/green-mbtools/tests/test_data/ir_grid/1e4.h5'
     GW_result_path = '/home/orit/VS_codes1/green-mbtools/tests/test_data/H2_GW/sim.h5'
