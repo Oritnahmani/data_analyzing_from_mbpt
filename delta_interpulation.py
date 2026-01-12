@@ -51,7 +51,7 @@ def fourier_transform(new_delta_tau, beta,green_tau, ir_grid_path):
     return delta_omega, green_omega
 
 
-def dyson_green_to_sigma_with_delta(beta, green_omega,number_of_orbitals, ir_grid_path,mu, delta_omega,hopping, avg_slice=None, use_weights=False):
+def dyson_green_to_sigma_split_omega(beta, green_omega,number_of_orbitals, ir_grid_path,mu, delta_omega,hopping, avg_slice=None, use_weights=False):
     selfenergy_iw = np.zeros((green_omega.shape[0], number_of_orbitals, number_of_orbitals), dtype=complex)
     my_ir = ir.IR_factory(beta, ir_grid_path)
     eye = np.eye(number_of_orbitals, dtype=complex)
@@ -127,19 +127,39 @@ def save_sigma_split_to_hdf5(h5_path, sigma_static, sigma_dynamic_iw, sigma_iw=N
 
 
 
+def read_beta_from_h5(h5_path: str) -> float:
+    import h5py
+    candidates = ["/beta", "/params/beta", "/grid/beta", "/simulation/beta"]
+    with h5py.File(h5_path, "r") as f:
+        for k in candidates:
+            if k in f:
+                return float(f[k][()])
+        # fallback: search any dataset that contains 'beta'
+        found = []
+        def collect(name, obj):
+            if isinstance(obj, h5py.Dataset) and "beta" in name.lower():
+                found.append(name)
+        f.visititems(collect)
+        if found:
+            return float(f[found[0]][()])
+    raise KeyError(f"beta not found in {h5_path}")
+
+
+
 def main():
     ap = argparse.ArgumentParser(description="Wait for inchworm G files, then compute selfenergy_iw.")
     ap.add_argument("--run-dir", default=".", help="Directory where inchworm output files are located.")
     ap.add_argument("--beta", type=float, required=True)
     ap.add_argument("--orbitals", type=int, required=True)
-    ap.add_argument("--time-intervals", default="time_intervals.txt", help="Path (relative to run-dir) for time_intervals.txt")
+    ap.add_argument("--time_intervals", default="time_intervals.txt", help="Path (relative to run-dir) for time_intervals.txt")
     ap.add_argument("--delta-file", default="delta.txt", help="Path (relative to run-dir) for delta.txt")
     ap.add_argument("--hopping-file", default="hopping.txt", help="Path (relative to run-dir) for hopping.txt")
-
     # Mu inputs (these are in your original script; make them arguments so it works on cluster)
-    ap.add_argument("--nio-gw-h5", required=True, help="Path to NiO_GW_iter*.h5")
-    ap.add_argument("--input-h5", required=True, help="Path to input.h5 (grid info)")
-    ap.add_argument("--ir-grid", required=True, help="Path to IR grid h5 file, e.g. 1e5.h5")
+    #TODO
+    ap.add_argument("--nio-gw-h5", default="NiO_GW_iter14.h5", help="Path to NiO_GW_iter*.h5 (default: NiO_GW_iter14.h5)")
+    ap.add_argument("--input-h5", default="input.h5", help="Path to input.h5 (grid info)")
+    # TODO
+    ap.add_argument("--ir-grid", default="1e5.h5" , help="Path to IR grid h5 file, e.g. 1e5.h5")
 
     # Green naming
     ap.add_argument("--g-pattern", default="G_{i}_{j}.txt",
@@ -152,10 +172,10 @@ def main():
     run_dir = Path(args.run_dir).resolve()
 
     # 1) Wait until ALL G_{i}_{j} files exist & stable
-    g_files = find_g_files(run_dir, args.orbitals, args.g_pattern)
-    print(f"[watch] Waiting for {len(g_files)} Green files like: {run_dir / args.g_pattern.format(i=0,j=0)}")
-    wait_for_files(g_files, poll_s=5.0, stable_checks=2, stable_interval_s=2.0)
-    print("[watch] Green files present and stable.")
+    # g_files = find_g_files(run_dir, args.orbitals, args.g_pattern)
+    # print(f"[watch] Waiting for {len(g_files)} Green files like: {run_dir / args.g_pattern.format(i=0,j=0)}")
+    # wait_for_files(g_files, poll_s=5.0, stable_checks=2, stable_interval_s=2.0)
+    # print("[watch] Green files present and stable.")
 
     # 2) Compute selfenergy
     mu, sigma_1 = read_mu(args.nio_gw_h5, args.input_h5)
@@ -171,13 +191,34 @@ def main():
     delta_omega, green_omega, my_ir = fourier_transform(args.beta, args.ir_grid, new_delta_tau, green_tau)
 
     hopping = read_hopping_from_txt(str(hopping_file), args.orbitals)
-    selfenergy_iw = dyson_green_to_sigma_with_delta(
-        args.beta, green_omega, args.orbitals, mu, delta_omega, hopping, my_ir
-    )
+    selfenergy_iw, sigma_static, sigma_dynamic_iw, my_ir = dyson_green_to_sigma_split_omega(
+    beta=args.beta,
+    green_omega=green_omega,
+    number_of_orbitals=args.orbitals,
+    ir_grid_path=args.ir_grid,
+    mu=mu,
+    delta_omega=delta_omega,
+    hopping=hopping,
+    avg_slice=None,          # or e.g. slice(10, 200)
+    use_weights=False)
+
+
+    save_sigma_split_to_hdf5(args.nio_gw_h5, sigma_static, sigma_dynamic_iw, sigma_iw=None)
+
+
 
     out_path = run_dir / args.out_npy
     np.save(out_path, selfenergy_iw)
     print(f"[save] {out_path}  shape={selfenergy_iw.shape} dtype={selfenergy_iw.dtype}")
+
+
+
+    if args.beta is None:
+        args.beta = read_beta_from_h5(args.nio_gw_h5)
+        print(f"[info] beta={args.beta} read from {args.nio_gw_h5}")
+
+
+
 
 if __name__ == "__main__":
     main()
