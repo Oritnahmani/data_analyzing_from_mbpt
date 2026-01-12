@@ -51,12 +51,30 @@ def fourier_transform(new_delta_tau, beta,green_tau, ir_grid_path):
     return delta_omega, green_omega
 
 
-def dyson_green_to_sigma_with_delta(beta, green_omega,number_of_orbitals, ir_grid_path,mu, delta_omega,hopping):
+def dyson_green_to_sigma_with_delta(beta, green_omega,number_of_orbitals, ir_grid_path,mu, delta_omega,hopping, avg_slice=None, use_weights=False):
     selfenergy_iw = np.zeros((green_omega.shape[0], number_of_orbitals, number_of_orbitals), dtype=complex)
     my_ir = ir.IR_factory(beta, ir_grid_path)
+    eye = np.eye(number_of_orbitals, dtype=complex)
     for omega in range(green_omega.shape[0]):
-        selfenergy_iw[omega,:,:] = - np.linalg.inv(green_omega[omega,:,:]) - hopping + (1j * my_ir.wsample[omega] + mu) * np.eye(number_of_orbitals) - delta_omega[omega,:,:]
-    return(selfenergy_iw)
+        selfenergy_iw[omega,:,:] = - np.linalg.inv(green_omega[omega,:,:]) - hopping + (1j * my_ir.wsample[omega] + mu) * eye - delta_omega[omega,:,:]
+    if avg_slice is None:
+        sigma_block = selfenergy_iw
+        wsample_block = my_ir.wsample
+    else:
+        sigma_block = selfenergy_iw[avg_slice, :, :]
+        wsample_block = my_ir.wsample[avg_slice]
+    if use_weights:
+        # A common choice is to downweight large |w| or emphasize them; pick something sensible.
+        # Here: weights ~ 1/|w| (avoid div by 0 though fermionic w never 0).
+        wts = 1.0 / np.abs(wsample_block)
+        wts = wts / np.sum(wts)
+        sigma_static = np.tensordot(wts, sigma_block, axes=(0, 0))  # (Norb, Norb)
+    else:
+        sigma_static = np.mean(sigma_block, axis=0)
+
+    sigma_dynamic_iw = selfenergy_iw - sigma_static[None, :, :]
+    return selfenergy_iw, sigma_static, sigma_dynamic_iw, my_ir
+
 
 
 
@@ -99,6 +117,13 @@ def find_g_files(run_dir: Path, orbitals: int, g_glob: str):
             expected.append(run_dir / name)
     return expected
 
+
+def save_sigma_split_to_hdf5(h5_path, sigma_static, sigma_dynamic_iw, sigma_iw=None):
+    with h5py.File(h5_path, "w") as f:
+        f.create_dataset("Sigma_static", data=sigma_static)                 # (Norb, Norb)
+        f.create_dataset("Sigma_dynamic_iw", data=sigma_dynamic_iw)         # (Nw, Norb, Norb)
+        if sigma_iw is not None:
+            f.create_dataset("Sigma_iw", data=sigma_iw)                     # optional
 
 
 
