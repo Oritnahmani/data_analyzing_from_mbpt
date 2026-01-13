@@ -7,6 +7,7 @@ import scipy.interpolate
 import h5py
 from green_mbtools.pesto import mb
 from mbanalysis import ir
+# from inchworm_stuff.hdf5_to_txt import GW_result_path
 from inchworm_stuff.redaing_txt import read_greenfunction_from_txt, read_delta_tau_from_txt, read_hopping_from_txt
 
 def read_mu(NiO_GW_h5,inputh5_path):
@@ -144,28 +145,26 @@ def save_sigma_split_to_hdf5(sigma_file, sigma_static, sigma_dynamic_iw, sigma_i
 
 
 def read_beta_from_h5(h5_path: str) -> float:
-    import h5py
-    candidates = ["/beta", "/params/beta", "/grid/beta", "/simulation/beta"]
     with h5py.File(h5_path, "r") as f:
-        for k in candidates:
-            if k in f:
-                return float(f[k][()])
-        # fallback: search any dataset that contains 'beta'
-        found = []
-        def collect(name, obj):
-            if isinstance(obj, h5py.Dataset) and "beta" in name.lower():
-                found.append(name)
-        f.visititems(collect)
-        if found:
-            return float(f[found[0]][()])
-    raise KeyError(f"beta not found in {h5_path}")
+         # Read the index of the last completed iteration
+        it = int(f["iter"][()])   # e.g. 11
+
+        mesh_path = f"/iter{it}/Selfenergy/mesh"
+        if mesh_path not in f:
+            raise KeyError(f"Mesh not found at {mesh_path}")
+
+        t = f[mesh_path][:]
+        beta = float(t[-1])
+
+    return beta
+    
 
 
 
 def main():
     ap = argparse.ArgumentParser(description="Wait for inchworm G files, then compute selfenergy_iw.")
     ap.add_argument("--run-dir", default=".", help="Directory where inchworm output files are located.")
-    ap.add_argument("--beta", type=float, required=True)
+    ap.add_argument("--beta", type=float)
     ap.add_argument("--orbitals", type=int, required=True)
     ap.add_argument("--time_intervals", default="time_intervals.txt", help="Path (relative to run-dir) for time_intervals.txt")
     ap.add_argument("--delta-file", default="delta.txt", help="Path (relative to run-dir) for delta.txt")
@@ -194,6 +193,10 @@ def main():
     # print("[watch] Green files present and stable.")
 
     # 2) Compute selfenergy
+    if args.beta is None:
+        args.beta = read_beta_from_h5(args.nio_gw_h5)
+        print(f"[info] beta={args.beta} read from {args.nio_gw_h5}")
+
     mu, sigma_1 = read_mu(args.nio_gw_h5, args.input_h5)
 
     time_filename = run_dir / args.time_intervals
@@ -237,10 +240,7 @@ def main():
 
 
 
-    if args.beta is None:
-        args.beta = read_beta_from_h5(args.nio_gw_h5)
-        print(f"[info] beta={args.beta} read from {args.nio_gw_h5}")
-
+    
 
 
 
