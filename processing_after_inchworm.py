@@ -10,18 +10,11 @@ from mbanalysis import ir
 # from inchworm_stuff.hdf5_to_txt import GW_result_path
 from inchworm_stuff.redaing_txt import read_greenfunction_from_txt, read_delta_tau_from_txt, read_hopping_from_txt
 
-def read_mu(NiO_GW_h5,inputh5_path):
-    with h5py.File(inputh5_path, 'r') as f:
-        ir_list = f["/grid/ir_list"][()]
-        weight = f["/grid/weight"][()]
-        index = f["/grid/index"][()]
-        conj_list = f["grid/conj_list"][()]
+def read_mu(NiO_GW_h5):
     with h5py.File(NiO_GW_h5, 'r') as f:
         it = f["iter"][()]
         mu = f['iter' + str(it) + '/mu'][()]
-        sigma_1r = f['iter' + str(it) + '/Sigma1'][()]
-        sigma_1 = mb.to_full_bz(sigma_1r, conj_list, ir_list, index, 1)
-    return mu, sigma_1
+    return mu
 
 
 
@@ -63,7 +56,7 @@ def interpolation(tau_original, delta_tau_original, tau_new, kind="linear"):
 #     return np.array(g_tau)
 
 
-def fourier_transform( beta , ir_grid_path,green_tau,new_delta_tau ):
+def fourier_transform( beta , ir_grid_path,new_delta_tau, green_tau ):
 
     my_ir = ir.IR_factory(beta, ir_grid_path)
     delta_omega = my_ir.tau_to_w(new_delta_tau)
@@ -221,7 +214,7 @@ def main():
     # 2) Compute selfenergy
 
     beta = read_beta_from_seet_sbatch(sbatch_path)
-    mu, sigma_1 = read_mu(str(nio_gw_h5), str(input_h5))
+    mu = read_mu(str(nio_gw_h5))
 
 
 
@@ -233,13 +226,8 @@ def main():
 
     new_delta_tau =  interpolation(tau_delta_original, delta_tau, t_arr, kind="linear")
 
-  
-
-
 
     delta_omega, green_omega = fourier_transform(beta, str(ir_grid), new_delta_tau, green_tau)
-
-    
 
     selfenergy_iw, sigma_static, sigma_dynamic_iw, my_ir = dyson_green_to_sigma_split_omega(
     beta=beta,
@@ -262,9 +250,7 @@ def main():
     )
 
 
-    # out_path = run_dir / args.out_npy
-    # np.save(out_path, selfenergy_iw)
-    # print(f"[save] {out_path}  shape={selfenergy_iw.shape} dtype={selfenergy_iw.dtype}")
+
 
 
 
