@@ -25,9 +25,6 @@ def interpolation(tau_original, delta_tau_original, tau_new, kind="linear"):
 
     new_delta_tau = np.zeros((len(tau_new), delta_tau_original.shape[1], delta_tau_original.shape[2]), dtype=complex)
 
-
-
-
     for i in range(delta_tau_original.shape[1]):
         for j in range(delta_tau_original.shape[2]):
             real_interp = scipy.interpolate.interp1d(
