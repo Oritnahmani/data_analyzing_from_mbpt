@@ -8,7 +8,7 @@ import h5py
 from green_mbtools.pesto import mb
 from mbanalysis import ir
 # from inchworm_stuff.hdf5_to_txt import GW_result_path
-from inchworm_stuff.redaing_txt import read_greenfunction_from_txt, read_delta_tau_from_txt, read_hopping_from_txt
+from inchworm_stuff.redaing_txt import read_greenfunction_from_txt_spin, read_delta_tau_from_txt_spin, read_hopping_from_txt_spin
 
 def read_mu(NiO_GW_h5):
     with h5py.File(NiO_GW_h5, 'r') as f:
@@ -23,19 +23,24 @@ def interpolation(tau_original, delta_tau_original, tau_new, kind="linear"):
     tau_new = np.asarray(tau_new, dtype=float)
     delta_tau_original = np.asarray(delta_tau_original)
 
-    new_delta_tau = np.zeros((len(tau_new), delta_tau_original.shape[1], delta_tau_original.shape[2]), dtype=complex)
+    Nt_new = len(tau_new)
+    nspin = delta_tau_original.shape[1]
+    norb  = delta_tau_original.shape[2]
 
-    for i in range(delta_tau_original.shape[1]):
-        for j in range(delta_tau_original.shape[2]):
-            real_interp = scipy.interpolate.interp1d(
-                tau_original, delta_tau_original[:, i, j].real,
-                kind=kind, fill_value="extrapolate", assume_sorted=True
-            )
-            imag_interp = scipy.interpolate.interp1d(
-                tau_original, delta_tau_original[:, i, j].imag,
-                kind=kind, fill_value="extrapolate", assume_sorted=True
-            )
-            new_delta_tau[:, i, j] = real_interp(tau_new) + 1j * imag_interp(tau_new)
+    new_delta_tau = np.zeros((Nt_new, nspin, norb, norb), dtype=complex)
+
+    for s in range(nspin):
+        for i in range(norb):
+            for j in range(norb):
+                real_interp = scipy.interpolate.interp1d(
+                    tau_original, delta_tau_original[:, s, i, j].real,
+                    kind=kind, fill_value="extrapolate", assume_sorted=True
+                )
+                imag_interp = scipy.interpolate.interp1d(
+                    tau_original, delta_tau_original[:, s, i, j].imag,
+                    kind=kind, fill_value="extrapolate", assume_sorted=True
+                )
+                new_delta_tau[:, s, i, j] = real_interp(tau_new) + 1j * imag_interp(tau_new)
 
     return new_delta_tau
 
@@ -56,17 +61,40 @@ def interpolation(tau_original, delta_tau_original, tau_new, kind="linear"):
 def fourier_transform( beta , ir_grid_path,new_delta_tau, green_tau ):
 
     my_ir = ir.IR_factory(beta, ir_grid_path)
-    delta_omega = my_ir.tau_to_w(new_delta_tau)
-    green_omega = my_ir.tau_to_w(green_tau)
+    nspin = new_delta_tau.shape[1]
+    norb  = new_delta_tau.shape[2]
+
+    # Determine Nw from transforming one block (or use my_ir.wsample length)
+    # We'll just allocate using my_ir.wsample:
+    Nw = len(my_ir.wsample)
+
+    delta_omega = np.zeros((Nw, nspin, norb, norb), dtype=complex)
+    green_omega = np.zeros((Nw, nspin, norb, norb), dtype=complex)
+
+    for s in range(nspin):
+        delta_omega[:, s] = my_ir.tau_to_w(new_delta_tau[:, s])
+        green_omega[:, s] = my_ir.tau_to_w(green_tau[:, s])
     return delta_omega, green_omega
 
 
 def dyson_green_to_sigma_split_omega(beta, green_omega,number_of_orbitals, ir_grid_path,mu, delta_omega,hopping, avg_slice=None, use_weights=False):
-    selfenergy_iw = np.zeros((green_omega.shape[0], number_of_orbitals, number_of_orbitals), dtype=complex)
     my_ir = ir.IR_factory(beta, ir_grid_path)
     eye = np.eye(number_of_orbitals, dtype=complex)
-    for omega in range(green_omega.shape[0]):
-        selfenergy_iw[omega,:,:] = - np.linalg.inv(green_omega[omega,:,:]) - hopping + (1j * my_ir.wsample[omega] + mu) * eye - delta_omega[omega,:,:]
+
+    Nw = green_omega.shape[0]
+    nspin = green_omega.shape[1]
+
+    selfenergy_iw = np.zeros((Nw, nspin, number_of_orbitals, number_of_orbitals), dtype=complex)
+
+    for s in range(nspin):
+        for omega in range(Nw):
+            # Σ = -G^{-1} - t + (iω + μ)I - Δ
+            selfenergy_iw[omega, s] = (
+                -np.linalg.inv(green_omega[omega, s])
+                - hopping[s]
+                + (1j * my_ir.wsample[omega] + mu) * eye
+                - delta_omega[omega, s]
+            )
     if avg_slice is None:
         sigma_block = selfenergy_iw
         wsample_block = my_ir.wsample
@@ -214,12 +242,18 @@ def main():
     mu = read_mu(str(nio_gw_h5))
 
 
+    hopping = read_hopping_from_txt_spin(str(hopping_file))   # (spin, Norb, Norb)
+    num_orbitals = hopping.shape[1]                           # Norb (per spin)
 
-    hopping = read_hopping_from_txt(str(hopping_file))
-    num_orbitals = hopping.shape[0]
+    green_tau, t_arr = read_greenfunction_from_txt_spin(
+        time_filename=str(time_filename),
+        green_path=str(g_dir),
+    )  # (Nt, spin, Norb, Norb), (Nt,)
 
-    green_tau, t_arr = read_greenfunction_from_txt(num_orbitals, str(time_filename), str(g_dir))
-    delta_tau, tau_delta_original = read_delta_tau_from_txt(str(delta_file), num_orbitals,beta)
+    delta_tau, tau_delta_original = read_delta_tau_from_txt_spin(
+        str(delta_file),
+        beta=beta
+    )  # (Nt_delta, spin, Norb, Norb), (Nt_delta,)
 
     new_delta_tau =  interpolation(tau_delta_original, delta_tau, t_arr, kind="linear")
 
@@ -248,10 +282,12 @@ def main():
 
 
 
+    print("hopping:", hopping.shape)         # (2, Norb, Norb)
+    print("green_tau:", green_tau.shape)     # (Nt, 2, Norb, Norb)
+    print("delta_tau:", delta_tau.shape)     # (NtΔ, 2, Norb, Norb)
 
 
-
-    
+        
 
 
 
