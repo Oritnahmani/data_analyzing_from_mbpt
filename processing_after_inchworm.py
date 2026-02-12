@@ -178,50 +178,57 @@ def read_beta_from_seet_sbatch(sbatch_path: str | Path) -> float:
     return float(m.group(1))
 
 
+def build_argparser():
+    ap = argparse.ArgumentParser(
+        description="Wait for inchworm G files, then compute selfenergy_iw."
+    )
 
-
-def main():
-    ap = argparse.ArgumentParser(description="Wait for inchworm G files, then compute selfenergy_iw.")
     ap.add_argument("--sbatch-dir", type=Path, default=None,
-                help="Directory containing the SEET sbatch file (default: run-dir)")
+                    help="Directory containing the SEET sbatch file (default: run-dir)")
     ap.add_argument("--sbatch-name", type=Path, default=Path("sbatch_seet"),
-                help="Filename of the SEET sbatch script inside sbatch-dir")
+                    help="Filename of the SEET sbatch script inside sbatch-dir")
 
-    ap.add_argument("--run-dir",type=Path, default=".", help="Directory where inchworm output files are located.")
-    ap.add_argument("--time_intervals",type=Path, default="time_intervals.txt", help="Path (relative to run-dir) for time_intervals.txt")
-    ap.add_argument("--delta-file",type=Path, default="delta.txt", help="Path (relative to run-dir) for delta.txt")
-    ap.add_argument("--hopping-file", type=Path, default="hopping.txt", help="Path (relative to run-dir) for hopping.txt")
-    # Mu inputs (these are in your original script; make them arguments so it works on cluster)
-    #TODO
-    ap.add_argument("--nio-gw-h5", type=Path, default="NiO_GW_iter14.h5", help="Path to NiO_GW_iter*.h5 (default: NiO_GW_iter14.h5)")
-    ap.add_argument("--input-h5", type=Path, default="input.h5", help="Path to input.h5 (grid info)")
-    # TODO
-    ap.add_argument("--ir-grid", type=Path, default="1e5.h5" , help="Path to IR grid h5 file, e.g. 1e5.h5")
+    ap.add_argument("--run-dir", type=Path, default=".",
+                    help="Directory where inchworm output files are located.")
+    ap.add_argument("--time_intervals", type=Path, default="time_intervals.txt",
+                    help="Path (relative to run-dir) for time_intervals.txt")
+    ap.add_argument("--delta-file", type=Path, default="delta.txt",
+                    help="Path (relative to run-dir) for delta.txt")
+    ap.add_argument("--hopping-file", type=Path, default="hopping.txt",
+                    help="Path (relative to run-dir) for hopping.txt")
 
-    # Green naming
+    ap.add_argument("--nio-gw-h5", type=Path, default="NiO_GW_iter14.h5",
+                    help="Path to NiO_GW_iter*.h5 (default: NiO_GW_iter14.h5)")
+    ap.add_argument("--input-h5", type=Path, default="input.h5",
+                    help="Path to input.h5 (grid info)")
+    ap.add_argument("--ir-grid", type=Path, default="1e5.h5",
+                    help="Path to IR grid h5 file, e.g. 1e5.h5")
+
     ap.add_argument("--g-dir", type=Path, default=None,
-                help="Directory containing G_{i}_{j}.dat files (default: run-dir)")
+                    help="Directory containing G_{i}_{j}.dat files (default: run-dir)")
     ap.add_argument("--g-pattern", type=str, default="G_{i}_{j}.dat",
-                help='Green filename pattern, e.g. "G_{i}_{j}.dat"')
+                    help='Green filename pattern, e.g. "G_{i}_{j}.dat"')
+
+    ap.add_argument("--out-npy", default="selfenergy_iw.npy",
+                    help="Output numpy file (saved in run-dir).")
+    
+    ap.add_argument("--beta", type=float, default=None,
+                help="Inverse temperature beta.")
+    return ap
 
 
-    # Output
-    ap.add_argument("--out-npy", default="selfenergy_iw.npy", help="Output numpy file (saved in run-dir).")
-    args = ap.parse_args()
+def run_processing(args) -> np.ndarray:
+    run_dir = args.run_dir.expanduser().resolve()
 
+    def resolve(p: Path) -> Path:
+        p = p.expanduser()
+        return (run_dir / p).resolve() if not p.is_absolute() else p.resolve()
 
-    run_dir = args.run_dir.expanduser().resolve() 
-    def resolve(p: Path) -> Path: 
-        p = p.expanduser() 
-        return (run_dir / p).resolve() if not p.is_absolute() else p.resolve() 
-
-
-
-    time_filename = resolve(args.time_intervals) 
-    delta_file = resolve(args.delta_file) 
-    hopping_file = resolve(args.hopping_file) 
-    nio_gw_h5 = resolve(args.nio_gw_h5) 
-    input_h5 = resolve(args.input_h5) 
+    time_filename = resolve(args.time_intervals)
+    delta_file = resolve(args.delta_file)
+    hopping_file = resolve(args.hopping_file)
+    nio_gw_h5 = resolve(args.nio_gw_h5)
+    input_h5 = resolve(args.input_h5)
     ir_grid = resolve(args.ir_grid)
 
     g_dir = resolve(args.g_dir) if args.g_dir is not None else run_dir
@@ -229,49 +236,43 @@ def main():
     sbatch_dir = resolve(args.sbatch_dir) if args.sbatch_dir is not None else run_dir
     sbatch_path = (sbatch_dir / args.sbatch_name).expanduser().resolve()
 
-
-    # 1) Wait until ALL G_{i}_{j} files exist & stable
-    # g_files = find_g_files(run_dir, args.orbitals, args.g_pattern)
-    # print(f"[watch] Waiting for {len(g_files)} Green files like: {run_dir / args.g_pattern.format(i=0,j=0)}")
-    # wait_for_files(g_files, poll_s=5.0, stable_checks=2, stable_interval_s=2.0)
-    # print("[watch] Green files present and stable.")
-
-    # 2) Compute selfenergy
-
-    beta = read_beta_from_seet_sbatch(sbatch_path)
+    # --- compute selfenergy ---
+    if args.beta is not None:
+        beta = args.beta
+    else:
+        beta = read_beta_from_seet_sbatch(sbatch_path)
     mu = read_mu(str(nio_gw_h5))
 
-
     hopping = read_hopping_from_txt_spin(str(hopping_file))   # (spin, Norb, Norb)
-    num_orbitals = hopping.shape[1]                           # Norb (per spin)
+    num_orbitals = hopping.shape[1]
 
     green_tau, t_arr = read_greenfunction_from_txt_spin(
         time_filename=str(time_filename),
         green_path=str(g_dir),
-    )  # (Nt, spin, Norb, Norb), (Nt,)
+    )
 
     delta_tau, tau_delta_original = read_delta_tau_from_txt_spin(
         str(delta_file),
         beta=beta
-    )  # (Nt_delta, spin, Norb, Norb), (Nt_delta,)
+    )
 
-    new_delta_tau =  interpolation(tau_delta_original, delta_tau, t_arr, kind="linear")
-
+    new_delta_tau = interpolation(tau_delta_original, delta_tau, t_arr, kind="linear")
 
     delta_omega, green_omega = fourier_transform(beta, str(ir_grid), new_delta_tau, green_tau)
 
     selfenergy_iw, sigma_static, sigma_dynamic_iw, my_ir = dyson_green_to_sigma_split_omega(
-    beta=beta,
-    green_omega=green_omega,
-    number_of_orbitals=num_orbitals,
-    ir_grid_path=str(ir_grid),
-    mu=mu,
-    delta_omega=delta_omega,
-    hopping=hopping,
-    avg_slice=None,          # or e.g. slice(10, 200)
-    use_weights=False)
+        beta=beta,
+        green_omega=green_omega,
+        number_of_orbitals=num_orbitals,
+        ir_grid_path=str(ir_grid),
+        mu=mu,
+        delta_omega=delta_omega,
+        hopping=hopping,
+        avg_slice=None,
+        use_weights=False
+    )
 
-
+    # keep your saving behavior if you want
     sigma_file = run_dir / "selfenergy_split.h5"
     save_sigma_split_to_hdf5(
         sigma_file,
@@ -281,10 +282,112 @@ def main():
     )
 
 
+    return selfenergy_iw
 
-    print("hopping:", hopping.shape)         # (2, Norb, Norb)
-    print("green_tau:", green_tau.shape)     # (Nt, 2, Norb, Norb)
-    print("delta_tau:", delta_tau.shape)     # (NtΔ, 2, Norb, Norb)
+
+
+
+def main():
+
+    ap = build_argparser()
+    args = ap.parse_args()
+    _ = run_processing(args)
+    # ap = argparse.ArgumentParser(description="Wait for inchworm G files, then compute selfenergy_iw.")
+    # ap.add_argument("--sbatch-dir", type=Path, default=None,
+    #             help="Directory containing the SEET sbatch file (default: run-dir)")
+    # ap.add_argument("--sbatch-name", type=Path, default=Path("sbatch_seet"),
+    #             help="Filename of the SEET sbatch script inside sbatch-dir")
+
+    # ap.add_argument("--run-dir",type=Path, default=".", help="Directory where inchworm output files are located.")
+    # ap.add_argument("--time_intervals",type=Path, default="time_intervals.txt", help="Path (relative to run-dir) for time_intervals.txt")
+    # ap.add_argument("--delta-file",type=Path, default="delta.txt", help="Path (relative to run-dir) for delta.txt")
+    # ap.add_argument("--hopping-file", type=Path, default="hopping.txt", help="Path (relative to run-dir) for hopping.txt")
+    # # Mu inputs (these are in your original script; make them arguments so it works on cluster)
+    # #TODO
+    # ap.add_argument("--nio-gw-h5", type=Path, default="NiO_GW_iter14.h5", help="Path to NiO_GW_iter*.h5 (default: NiO_GW_iter14.h5)")
+    # ap.add_argument("--input-h5", type=Path, default="input.h5", help="Path to input.h5 (grid info)")
+    # # TODO
+    # ap.add_argument("--ir-grid", type=Path, default="1e5.h5" , help="Path to IR grid h5 file, e.g. 1e5.h5")
+
+    # # Green naming
+    # ap.add_argument("--g-dir", type=Path, default=None,
+    #             help="Directory containing G_{i}_{j}.dat files (default: run-dir)")
+    # ap.add_argument("--g-pattern", type=str, default="G_{i}_{j}.dat",
+    #             help='Green filename pattern, e.g. "G_{i}_{j}.dat"')
+
+
+    # # Output
+    # ap.add_argument("--out-npy", default="selfenergy_iw.npy", help="Output numpy file (saved in run-dir).")
+    # args = ap.parse_args()
+
+
+    # run_dir = args.run_dir.expanduser().resolve() 
+    # def resolve(p: Path) -> Path: 
+    #     p = p.expanduser() 
+    #     return (run_dir / p).resolve() if not p.is_absolute() else p.resolve() 
+
+
+
+    # time_filename = resolve(args.time_intervals) 
+    # delta_file = resolve(args.delta_file) 
+    # hopping_file = resolve(args.hopping_file) 
+    # nio_gw_h5 = resolve(args.nio_gw_h5) 
+    # input_h5 = resolve(args.input_h5) 
+    # ir_grid = resolve(args.ir_grid)
+
+    # g_dir = resolve(args.g_dir) if args.g_dir is not None else run_dir
+    # print(g_dir)
+    # sbatch_dir = resolve(args.sbatch_dir) if args.sbatch_dir is not None else run_dir
+    # sbatch_path = (sbatch_dir / args.sbatch_name).expanduser().resolve()
+
+
+ 
+
+    # beta = read_beta_from_seet_sbatch(sbatch_path)
+    # mu = read_mu(str(nio_gw_h5))
+
+
+    # hopping = read_hopping_from_txt_spin(str(hopping_file))   # (spin, Norb, Norb)
+    # num_orbitals = hopping.shape[1]                           # Norb (per spin)
+
+    # green_tau, t_arr = read_greenfunction_from_txt_spin(
+    #     time_filename=str(time_filename),
+    #     green_path=str(g_dir),
+    # )  # (Nt, spin, Norb, Norb), (Nt,)
+
+    # delta_tau, tau_delta_original = read_delta_tau_from_txt_spin(
+    #     str(delta_file),
+    #     beta=beta
+    # )  # (Nt_delta, spin, Norb, Norb), (Nt_delta,)
+
+    # new_delta_tau =  interpolation(tau_delta_original, delta_tau, t_arr, kind="linear")
+
+
+    # delta_omega, green_omega = fourier_transform(beta, str(ir_grid), new_delta_tau, green_tau)
+
+    # selfenergy_iw, sigma_static, sigma_dynamic_iw, my_ir = dyson_green_to_sigma_split_omega(
+    # beta=beta,
+    # green_omega=green_omega,
+    # number_of_orbitals=num_orbitals,
+    # ir_grid_path=str(ir_grid),
+    # mu=mu,
+    # delta_omega=delta_omega,
+    # hopping=hopping,
+    # avg_slice=None,          # or e.g. slice(10, 200)
+    # use_weights=False)
+
+
+    # sigma_file = run_dir / "selfenergy_split.h5"
+    # save_sigma_split_to_hdf5(
+    #     sigma_file,
+    #     sigma_static,
+    #     sigma_dynamic_iw,
+    #     sigma_iw=selfenergy_iw
+    # )
+
+
+
+ 
 
 
         
