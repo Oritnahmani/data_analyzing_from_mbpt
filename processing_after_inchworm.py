@@ -48,14 +48,6 @@ def interpolation(tau_original, delta_tau_original, tau_new, kind="linear"):
 
 
 
-# def read_g_tau_from_txt(g_tau_file):
-#     g_tau = []
-#     with open(g_tau_file) as f:
-#         for line in f:
-#             if line.startswith("#"):
-#                 continue
-#             g_tau.append(np.array([float(x) for x in line.split()]))
-#     return np.array(g_tau)
 
 
 def fourier_transform( beta , ir_grid_path,new_delta_tau, green_tau ):
@@ -190,6 +182,15 @@ def build_argparser():
 
     ap.add_argument("--run-dir", type=Path, default=".",
                     help="Directory where inchworm output files are located.")
+    
+    # New: impurity control
+    ap.add_argument("--nimp", type=int, required=True,
+                    help="Number of impurities to process, e.g. 2")
+
+    ap.add_argument("--impurity-pattern", type=str, default="imp_{imp}",
+                    help='Pattern for impurity subdirectories under run-dir, e.g. "imp_{imp}" '
+                         'gives run_dir/imp_0, run_dir/imp_1, ...')
+
     ap.add_argument("--time_intervals", type=Path, default="time_intervals.txt",
                     help="Path (relative to run-dir) for time_intervals.txt")
     ap.add_argument("--delta-file", type=Path, default="delta.txt",
@@ -217,72 +218,119 @@ def build_argparser():
     return ap
 
 
-def run_processing(args) -> np.ndarray:
+def run_processing(args):
     run_dir = args.run_dir.expanduser().resolve()
 
-    def resolve(p: Path) -> Path:
-        p = p.expanduser()
-        return (run_dir / p).resolve() if not p.is_absolute() else p.resolve()
+    def resolve_under(base: Path, p: Path) -> Path:
+        p = Path(p).expanduser()
+        return (base / p).resolve() if not p.is_absolute() else p.resolve()
 
-    time_filename = resolve(args.time_intervals)
-    delta_file = resolve(args.delta_file)
-    hopping_file = resolve(args.hopping_file)
-    nio_gw_h5 = resolve(args.nio_gw_h5)
-    input_h5 = resolve(args.input_h5)
-    ir_grid = resolve(args.ir_grid)
+    nio_gw_h5 = resolve_under(run_dir, args.nio_gw_h5)
+    ir_grid = resolve_under(run_dir, args.ir_grid)
 
-    g_dir = resolve(args.g_dir) if args.g_dir is not None else run_dir
-    print(g_dir)
-    sbatch_dir = resolve(args.sbatch_dir) if args.sbatch_dir is not None else run_dir
+    sbatch_dir = resolve_under(run_dir, args.sbatch_dir) if args.sbatch_dir is not None else run_dir
     sbatch_path = (sbatch_dir / args.sbatch_name).expanduser().resolve()
 
-    # --- compute selfenergy ---
     if args.beta is not None:
         beta = args.beta
     else:
         beta = read_beta_from_seet_sbatch(sbatch_path)
+
     mu = read_mu(str(nio_gw_h5))
 
-    hopping = read_hopping_from_txt_spin(str(hopping_file))   # (spin, Norb, Norb)
-    num_orbitals = hopping.shape[1]
+    sigma_imp_list = []
+    sigma_inf_list = []
+    sigma_iw_list = []
 
-    green_tau, t_arr = read_greenfunction_from_txt_spin(
-        time_filename=str(time_filename),
-        green_path=str(g_dir),
-    )
+    shape_dyn_ref = None
+    shape_stat_ref = None
+    shape_full_ref = None
 
-    delta_tau, tau_delta_original = read_delta_tau_from_txt_spin(
-        str(delta_file),
-        beta=beta
-    )
+    for imp in range(args.nimp):
+        imp_dir = run_dir / args.impurity_pattern.format(imp=imp)
 
-    new_delta_tau = interpolation(tau_delta_original, delta_tau, t_arr, kind="linear")
+        time_filename = resolve_under(imp_dir, args.time_intervals)
+        delta_file = resolve_under(imp_dir, args.delta_file)
+        hopping_file = resolve_under(imp_dir, args.hopping_file)
+        g_dir = resolve_under(imp_dir, args.g_dir) if args.g_dir is not None else imp_dir
 
-    delta_omega, green_omega = fourier_transform(beta, str(ir_grid), new_delta_tau, green_tau)
+        print(f"Processing impurity {imp} in {imp_dir}")
 
-    selfenergy_iw, sigma_static, sigma_dynamic_iw, my_ir = dyson_green_to_sigma_split_omega(
-        beta=beta,
-        green_omega=green_omega,
-        number_of_orbitals=num_orbitals,
-        ir_grid_path=str(ir_grid),
-        mu=mu,
-        delta_omega=delta_omega,
-        hopping=hopping,
-        avg_slice=None,
-        use_weights=False
-    )
+        hopping = read_hopping_from_txt_spin(str(hopping_file))   # (ns, norb, norb)
+        num_orbitals = hopping.shape[1]
 
-    # keep your saving behavior if you want
-    sigma_file = run_dir / "selfenergy_split.h5"
-    save_sigma_split_to_hdf5(
-        sigma_file,
-        sigma_static,
-        sigma_dynamic_iw,
-        sigma_iw=selfenergy_iw
-    )
+        green_tau, t_arr = read_greenfunction_from_txt_spin(
+            time_filename=str(time_filename),
+            green_path=str(g_dir),
+        )
 
+        delta_tau, tau_delta_original = read_delta_tau_from_txt_spin(
+            str(delta_file),
+            beta=beta,
+        )
 
-    return selfenergy_iw
+        new_delta_tau = interpolation(
+            tau_delta_original,
+            delta_tau,
+            t_arr,
+            kind="linear",
+        )
+
+        delta_omega, green_omega, my_ir = fourier_transform(
+            beta,
+            str(ir_grid),
+            new_delta_tau,
+            green_tau,
+        )
+
+        selfenergy_iw, sigma_static, sigma_dynamic_iw, _ = dyson_green_to_sigma_split_omega(
+            beta=beta,
+            green_omega=green_omega,
+            number_of_orbitals=num_orbitals,
+            ir_grid_path=str(ir_grid),
+            mu=mu,
+            delta_omega=delta_omega,
+            hopping=hopping,
+            avg_slice=None,
+            use_weights=False,
+        )
+
+        if shape_dyn_ref is None:
+            shape_dyn_ref = sigma_dynamic_iw.shape
+            shape_stat_ref = sigma_static.shape
+            shape_full_ref = selfenergy_iw.shape
+        else:
+            if sigma_dynamic_iw.shape != shape_dyn_ref:
+                raise ValueError(
+                    f"Impurity {imp} dynamic sigma has shape {sigma_dynamic_iw.shape}, "
+                    f"expected {shape_dyn_ref}. Cannot stack impurities into one tensor."
+                )
+            if sigma_static.shape != shape_stat_ref:
+                raise ValueError(
+                    f"Impurity {imp} static sigma has shape {sigma_static.shape}, "
+                    f"expected {shape_stat_ref}. Cannot stack impurities into one tensor."
+                )
+            if selfenergy_iw.shape != shape_full_ref:
+                raise ValueError(
+                    f"Impurity {imp} full sigma has shape {selfenergy_iw.shape}, "
+                    f"expected {shape_full_ref}. Cannot stack impurities into one tensor."
+                )
+
+        sigma_iw_list.append(selfenergy_iw)       # (nomega, ns, norb, norb)
+        sigma_imp_list.append(sigma_dynamic_iw)   # (nomega, ns, norb, norb)
+        sigma_inf_list.append(sigma_static)       # (ns, nsorb, nsorb)
+
+    sigma_iw_all = np.stack(sigma_iw_list, axis=0)
+    sigma_imp_all = np.stack(sigma_imp_list, axis=0)
+    sigma_inf_all = np.stack(sigma_inf_list, axis=0)
+
+    out_h5 = resolve_under(run_dir, args.out_h5)
+    with h5py.File(out_h5, "w") as f:
+        f.create_dataset("Sigma_iw_all", data=sigma_iw_all)
+        f.create_dataset("Sigma_dynamic_iw_all", data=sigma_imp_all)
+        f.create_dataset("Sigma_static_all", data=sigma_inf_all)
+
+    return sigma_imp_all, sigma_inf_all
 
 
 
