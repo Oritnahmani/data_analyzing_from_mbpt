@@ -210,8 +210,8 @@ def build_argparser():
     ap.add_argument("--g-pattern", type=str, default="G_{i}_{j}.dat",
                     help='Green filename pattern, e.g. "G_{i}_{j}.dat"')
 
-    ap.add_argument("--out-npy", default="selfenergy_iw.npy",
-                    help="Output numpy file (saved in run-dir).")
+    ap.add_argument("--out-h5", type=Path, default="selfenergy_split_all.h5",
+                help="Output HDF5 file (saved in run-dir).")
     
     ap.add_argument("--beta", type=float, default=None,
                 help="Inverse temperature beta.")
