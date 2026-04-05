@@ -106,7 +106,18 @@ def dyson_green_to_sigma_split_omega(beta, green_omega,number_of_orbitals, ir_gr
     return selfenergy_iw, sigma_static, sigma_dynamic_iw, my_ir
 
 
+def transform_sigma_iw_to_tau(beta, ir_grid_path, sigma_dynamic_iw):
+    my_ir = ir.IR_factory(beta, ir_grid_path)
 
+    n_iw, nspin, norb, _ = sigma_dynamic_iw.shape
+
+    sigma_tau_blocks = []
+    for s in range(nspin):
+        sigma_tau_s = my_ir.w_to_tau(sigma_dynamic_iw[:, s])
+        sigma_tau_blocks.append(sigma_tau_s)
+
+    sigma_dynamic_tau = np.stack(sigma_tau_blocks, axis=1)
+    return sigma_dynamic_tau
 
 
 def snapshot(path: Path):
@@ -238,7 +249,7 @@ def run_processing(args):
 
     mu = read_mu(str(nio_gw_h5))
 
-    sigma_imp_list = []
+    sigma_imp_list = []   # this will now store Sigma_tau
     sigma_inf_list = []
     sigma_iw_list = []
 
@@ -256,7 +267,7 @@ def run_processing(args):
 
         print(f"Processing impurity {imp} in {imp_dir}")
 
-        hopping = read_hopping_from_txt_spin(str(hopping_file))   # (ns, norb, norb)
+        hopping = read_hopping_from_txt_spin(str(hopping_file))
         num_orbitals = hopping.shape[1]
 
         green_tau, t_arr = read_greenfunction_from_txt_spin(
@@ -276,7 +287,7 @@ def run_processing(args):
             kind="linear",
         )
 
-        delta_omega, green_omega, my_ir = fourier_transform(
+        delta_omega, green_omega = fourier_transform(
             beta,
             str(ir_grid),
             new_delta_tau,
@@ -295,14 +306,20 @@ def run_processing(args):
             use_weights=False,
         )
 
+        sigma_dynamic_tau = transform_sigma_iw_to_tau(
+            beta,
+            str(ir_grid),
+            sigma_dynamic_iw,
+        )
+
         if shape_dyn_ref is None:
-            shape_dyn_ref = sigma_dynamic_iw.shape
+            shape_dyn_ref = sigma_dynamic_tau.shape
             shape_stat_ref = sigma_static.shape
             shape_full_ref = selfenergy_iw.shape
         else:
-            if sigma_dynamic_iw.shape != shape_dyn_ref:
+            if sigma_dynamic_tau.shape != shape_dyn_ref:
                 raise ValueError(
-                    f"Impurity {imp} dynamic sigma has shape {sigma_dynamic_iw.shape}, "
+                    f"Impurity {imp} dynamic sigma_tau has shape {sigma_dynamic_tau.shape}, "
                     f"expected {shape_dyn_ref}. Cannot stack impurities into one tensor."
                 )
             if sigma_static.shape != shape_stat_ref:
@@ -312,13 +329,13 @@ def run_processing(args):
                 )
             if selfenergy_iw.shape != shape_full_ref:
                 raise ValueError(
-                    f"Impurity {imp} full sigma has shape {selfenergy_iw.shape}, "
+                    f"Impurity {imp} full sigma_iw has shape {selfenergy_iw.shape}, "
                     f"expected {shape_full_ref}. Cannot stack impurities into one tensor."
                 )
 
-        sigma_iw_list.append(selfenergy_iw)       # (nomega, ns, norb, norb)
-        sigma_imp_list.append(sigma_dynamic_iw)   # (nomega, ns, norb, norb)
-        sigma_inf_list.append(sigma_static)       # (ns, nsorb, nsorb)
+        sigma_iw_list.append(selfenergy_iw)
+        sigma_imp_list.append(sigma_dynamic_tau)
+        sigma_inf_list.append(sigma_static)
 
     sigma_iw_all = np.stack(sigma_iw_list, axis=0)
     sigma_imp_all = np.stack(sigma_imp_list, axis=0)
@@ -327,7 +344,7 @@ def run_processing(args):
     out_h5 = resolve_under(run_dir, args.out_h5)
     with h5py.File(out_h5, "w") as f:
         f.create_dataset("Sigma_iw_all", data=sigma_iw_all)
-        f.create_dataset("Sigma_dynamic_iw_all", data=sigma_imp_all)
+        f.create_dataset("Sigma_dynamic_tau_all", data=sigma_imp_all)
         f.create_dataset("Sigma_static_all", data=sigma_inf_all)
 
     return sigma_imp_all, sigma_inf_all
