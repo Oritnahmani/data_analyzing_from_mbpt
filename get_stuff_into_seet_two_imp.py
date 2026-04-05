@@ -23,7 +23,7 @@ def load_transform_data(transform_file: Path):
 
 def embed_all_impurities_to_full_orth(
     *,
-    sigma_imp_list,   # list of arrays, each (nomega, ns, nao_imp_i, nao_imp_i)
+    sigma_imp_list,   # list of arrays, each (ntau, ns, nao_imp_i, nao_imp_i)
     uu_trans,         # list of arrays, one per impurity
 ):
     """
@@ -32,7 +32,7 @@ def embed_all_impurities_to_full_orth(
     Returns
     -------
     sigma_full_orth : np.ndarray
-        Shape (nomega, ns, nao_full, nao_full)
+        Shape (ntau, ns, nao_full, nao_full)
     """
     if len(sigma_imp_list) != len(uu_trans):
         raise ValueError(
@@ -41,13 +41,13 @@ def embed_all_impurities_to_full_orth(
 
     # Infer output size from first projector and first sigma
     sigma0 = sigma_imp_list[0]
-    nomega, ns = sigma0.shape[:2]
+    ntau, ns = sigma0.shape[:2]
 
     # Figure out nao_full from UU orientation
     uu0 = uu_trans[0]
     nao_full = max(uu0.shape)
 
-    sigma_full_orth = np.zeros((nomega, ns, nao_full, nao_full), dtype=np.complex128)
+    sigma_full_orth = np.zeros((ntau, ns, nao_full, nao_full), dtype=np.complex128)
 
     for sigma_imp, uu in zip(sigma_imp_list, uu_trans):
         # sigma_imp: (w, s, p, q)
@@ -124,21 +124,21 @@ def rotate_dynamic_orth_to_ao_k(*, sigma_full_orth: np.ndarray, X_k: np.ndarray)
     """
     Rotate dynamic sigma from orthogonal basis to AO basis per k-point.
 
-    sigma_full_orth: (nomega, ns, nao_full, nao_full)
+    sigma_full_orth: (ntau, ns, nao_full, nao_full)
     X_k:             (nk, nao_full, nao_full)
 
     returns:
-    sigma_full_ao:   (nomega, ns, nk, nao_full, nao_full)
+    sigma_full_ao:   (ntau, ns, nk, nao_full, nao_full)
     """
-    nomega, ns, nao_full, _ = sigma_full_orth.shape
+    ntau, ns, nao_full, _ = sigma_full_orth.shape
     nk, nao_full2, _ = X_k.shape
     if nao_full != nao_full2:
         raise ValueError(f"nao_full mismatch: sigma has {nao_full}, X_k has {nao_full2}")
 
     X_k_H = X_k.conj().transpose(0, 2, 1)
 
-    sigma_full_ao = np.zeros((nomega, ns, nk, nao_full, nao_full), dtype=np.complex128)
-    for w in range(nomega):
+    sigma_full_ao = np.zeros((ntau, ns, nk, nao_full, nao_full), dtype=np.complex128)
+    for w in range(ntau):
         sigma_full_ao[w] = np.einsum(
             "kab, sbc, kcd -> skad",
             X_k,
@@ -178,7 +178,7 @@ def insert_sigma_into_seet_file(
     *,
     results_file: Path,
     iteration: int,
-    sigma_add_ao: np.ndarray,       # (nomega, ns, nk, nao_full, nao_full)
+    sigma_add_ao: np.ndarray,       # (ntau, ns, nk, nao_full, nao_full)
     sigma_inf_add_ao: np.ndarray,   # (ns, nk, nao_full, nao_full)
     mixing: float,
 ):
@@ -211,11 +211,10 @@ def main():
     ap.add_argument("--save-full-sigma", type=Path, default=None)
     args = ap.parse_args()
 
-    # This now needs to return one result per impurity.
-    # Recommended contract:
-    # sigma_imp_list: list of (nomega, ns, nao_imp_i, nao_imp_i)
-    # sigma_inf_list: list of (ns, nao_imp_i, nao_imp_i)
-    sigma_imp_list, sigma_inf_list = proc.run_processing(args)
+    sigma_imp_all, sigma_inf_all = proc.run_processing(args)
+
+    sigma_imp_list = [sigma_imp_all[i] for i in range(sigma_imp_all.shape[0])]
+    sigma_inf_list = [sigma_inf_all[i] for i in range(sigma_inf_all.shape[0])]
 
     nimp, uu_trans, X_k = load_transform_data(args.transform_file)
 
@@ -242,8 +241,8 @@ def main():
 
     if args.save_full_sigma is not None:
         with h5py.File(args.save_full_sigma, "w") as f:
-            f.create_dataset("Sigma_full_orth_iw", data=sigma_full_orth)
-            f.create_dataset("Sigma_full_ao_iw", data=sigma_full_ao)
+            f.create_dataset("Sigma_full_orth_tau", data=sigma_full_orth)
+            f.create_dataset("Sigma_full_ao_tau", data=sigma_full_ao)
             f.create_dataset("Sigma1_full_orth", data=sigma_inf_full_orth)
             f.create_dataset("Sigma1_full_ao", data=sigma_inf_full_ao)
 
