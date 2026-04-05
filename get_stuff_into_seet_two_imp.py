@@ -4,21 +4,17 @@ import h5py
 from data_analyzing_from_inchworm import processing_after_inchworm as proc
 
 
-def load_transform_data(transform_file: Path):
-    """
-    Load all impurity projectors and k-dependent basis transforms.
-
-    Returns
-    -------
-    nimp : int
-    uu_trans : list[np.ndarray]
-    X_k : np.ndarray
-    """
+def load_transform_data_ibz(transform_file: Path, input_file: Path):
     with h5py.File(transform_file, "r") as ft:
         nimp = int(ft["nimp"][()])
-        X_k = ft["X_k"][()]
+        X_inv_k_full = ft["X_inv_k"][()]
         uu_trans = [(ft[f"{i}/UU"][()] + 0j) for i in range(nimp)]
-    return nimp, uu_trans, X_k
+
+    with h5py.File(input_file, "r") as fin:
+        ir_list = fin["grid/ir_list"][()]
+
+    X_inv_k_ibz = X_inv_k_full[ir_list]
+    return nimp, uu_trans, X_inv_k_ibz
 
 
 def embed_all_impurities_to_full_orth(
@@ -223,7 +219,7 @@ def insert_sigma_into_seet_file(
         sigma_group["data"][...] = sigma_in + mixing * sigma_add_ao
         fs[f"{new_iter_key}/Sigma1"][...] = sigma_inf_in + mixing * sigma_inf_add_ao
 
-        
+
 def main():
     ap = proc.build_argparser()
     ap.add_argument("--transform-file", type=Path, required=True)
@@ -238,7 +234,10 @@ def main():
     sigma_imp_list = [sigma_imp_all[i] for i in range(sigma_imp_all.shape[0])]
     sigma_inf_list = [sigma_inf_all[i] for i in range(sigma_inf_all.shape[0])]
 
-    nimp, uu_trans, X_k = load_transform_data(args.transform_file)
+    nimp, uu_trans, X_k = load_transform_data_ibz(
+    args.transform_file,
+    args.input_h5,   # ← already exists from proc.build_argparser()
+)
 
     if len(sigma_imp_list) != nimp:
         raise ValueError(f"transform.h5 says nimp={nimp}, but processing returned {len(sigma_imp_list)} impurity blocks")
