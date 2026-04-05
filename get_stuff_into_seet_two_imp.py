@@ -184,24 +184,46 @@ def insert_sigma_into_seet_file(
 ):
     """
     Update iter{iteration}/Selfenergy/data and iter{iteration}/Sigma1.
+    If iter{iteration} does not exist, initialize it by copying iter{iteration-1}.
     """
     with h5py.File(results_file, "r+") as fs:
-        sigma_group = fs[f"iter{iteration}/Selfenergy"]
+        new_iter_key = f"iter{iteration}"
+        prev_iter_key = f"iter{iteration - 1}"
+
+        if new_iter_key not in fs:
+            if prev_iter_key not in fs:
+                raise KeyError(
+                    f"{new_iter_key} not found, and cannot initialize it because {prev_iter_key} is also missing."
+                )
+
+            prev_group = fs[prev_iter_key]
+            new_group = fs.create_group(new_iter_key)
+
+            # copy everything from previous iteration into the new one
+            for name in prev_group.keys():
+                prev_group.copy(name, new_group, name=name)
+
+            # update the top-level current-iteration marker if present
+            if "iter" in fs:
+                fs["iter"][...] = iteration
+
+        sigma_group = fs[f"{new_iter_key}/Selfenergy"]
         sigma_in = sigma_group["data"][()]
-        sigma_inf_in = fs[f"iter{iteration}/Sigma1"][()]
+        sigma_inf_in = fs[f"{new_iter_key}/Sigma1"][()]
 
         if sigma_in.shape != sigma_add_ao.shape:
-            raise ValueError(f"Dynamic sigma shape mismatch: SEET {sigma_in.shape} vs add {sigma_add_ao.shape}")
+            raise ValueError(
+                f"Dynamic sigma shape mismatch: SEET {sigma_in.shape} vs add {sigma_add_ao.shape}"
+            )
         if sigma_inf_in.shape != sigma_inf_add_ao.shape:
-            raise ValueError(f"Static sigma shape mismatch: SEET {sigma_inf_in.shape} vs add {sigma_inf_add_ao.shape}")
+            raise ValueError(
+                f"Static sigma shape mismatch: SEET {sigma_inf_in.shape} vs add {sigma_inf_add_ao.shape}"
+            )
 
-        sigma_in += mixing * sigma_add_ao
-        sigma_inf_in += mixing * sigma_inf_add_ao
+        sigma_group["data"][...] = sigma_in + mixing * sigma_add_ao
+        fs[f"{new_iter_key}/Sigma1"][...] = sigma_inf_in + mixing * sigma_inf_add_ao
 
-        sigma_group["data"][...] = sigma_in
-        fs[f"iter{iteration}/Sigma1"][...] = sigma_inf_in
-
-
+        
 def main():
     ap = proc.build_argparser()
     ap.add_argument("--transform-file", type=Path, required=True)
