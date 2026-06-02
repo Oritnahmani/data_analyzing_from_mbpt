@@ -179,29 +179,18 @@ def insert_sigma_into_seet_file(
     mixing: float,
 ):
     """
-    Update iter{iteration}/Selfenergy/data and iter{iteration}/Sigma1.
-    If iter{iteration} does not exist, initialize it by copying iter{iteration-1}.
+    Directly updates the existing iter{iteration}/Selfenergy/data and iter{iteration}/Sigma1.
+    Does NOT create a new iteration group or copy historical data.
     """
     with h5py.File(results_file, "r+") as fs:
         new_iter_key = f"iter{iteration}"
-        prev_iter_key = f"iter{iteration - 1}"
 
+        # If the target iteration is missing, raise an error instead of trying to create it
         if new_iter_key not in fs:
-            if prev_iter_key not in fs:
-                raise KeyError(
-                    f"{new_iter_key} not found, and cannot initialize it because {prev_iter_key} is also missing."
-                )
-
-            prev_group = fs[prev_iter_key]
-            new_group = fs.create_group(new_iter_key)
-
-            # copy everything from previous iteration into the new one
-            for name in prev_group.keys():
-                prev_group.copy(name, new_group, name=name)
-
-            # update the top-level current-iteration marker if present
-            if "iter" in fs:
-                fs["iter"][...] = iteration
+            raise KeyError(
+                f"Iteration group '{new_iter_key}' does not exist in {results_file}. "
+                f"Please ensure the group exists before running this script."
+            )
 
         sigma_group = fs[f"{new_iter_key}/Selfenergy"]
         sigma_in = sigma_group["data"][()]
@@ -216,10 +205,10 @@ def insert_sigma_into_seet_file(
                 f"Static sigma shape mismatch: SEET {sigma_inf_in.shape} vs add {sigma_inf_add_ao.shape}"
             )
 
+        # Mix and insert the fresh solver results directly into the current active datasets
         sigma_group["data"][...] = sigma_in + mixing * sigma_add_ao
         fs[f"{new_iter_key}/Sigma1"][...] = sigma_inf_in + mixing * sigma_inf_add_ao
-
-
+        
 def main():
     ap = proc.build_argparser()
     ap.add_argument("--transform-file", type=Path, required=True)
