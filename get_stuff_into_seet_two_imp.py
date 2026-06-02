@@ -174,41 +174,28 @@ def insert_sigma_into_seet_file(
     *,
     results_file: Path,
     iteration: int,
-    sigma_add_ao: np.ndarray,       # (ntau, ns, nk, nao_full, nao_full)
-    sigma_inf_add_ao: np.ndarray,   # (ns, nk, nao_full, nao_full)
-    mixing: float,
+    sigma_add_ao: np.ndarray,       
+    sigma_inf_add_ao: np.ndarray,   
+    mixing: float, # Left here so your arguments don't break, but we will ignore it to do a full replace
 ):
-    """
-    Directly updates the existing iter{iteration}/Selfenergy/data and iter{iteration}/Sigma1.
-    Does NOT create a new iteration group or copy historical data.
-    """
     with h5py.File(results_file, "r+") as fs:
-        new_iter_key = f"iter{iteration}"
+        iter_key = f"iter{iteration}"
 
-        # If the target iteration is missing, raise an error instead of trying to create it
-        if new_iter_key not in fs:
-            raise KeyError(
-                f"Iteration group '{new_iter_key}' does not exist in {results_file}. "
-                f"Please ensure the group exists before running this script."
-            )
+        # 1. If the iteration from your bash script doesn't exist, automatically find the last existing one.
+        if iter_key not in fs:
+            # Find all groups that look like 'iter1', 'iter2', etc., and pick the highest number
+            iter_nums = [int(k.replace('iter', '')) for k in fs.keys() if k.startswith('iter') and k != 'iter']
+            last_iter = max(iter_nums)
+            iter_key = f"iter{last_iter}"
+            print(f"Note: Automatically fell back to the last existing iteration: {iter_key}")
 
-        sigma_group = fs[f"{new_iter_key}/Selfenergy"]
-        sigma_in = sigma_group["data"][()]
-        sigma_inf_in = fs[f"{new_iter_key}/Sigma1"][()]
+        # 2. REPLACE the results completely (Overwriting old data with new solver data)
+        fs[f"{iter_key}/Selfenergy/data"][...] = sigma_add_ao
+        fs[f"{iter_key}/Sigma1"][...] = sigma_inf_add_ao
 
-        if sigma_in.shape != sigma_add_ao.shape:
-            raise ValueError(
-                f"Dynamic sigma shape mismatch: SEET {sigma_in.shape} vs add {sigma_add_ao.shape}"
-            )
-        if sigma_inf_in.shape != sigma_inf_add_ao.shape:
-            raise ValueError(
-                f"Static sigma shape mismatch: SEET {sigma_inf_in.shape} vs add {sigma_inf_add_ao.shape}"
-            )
+    print(f"Successfully REPLACED the results inside {results_file} -> {iter_key}")
 
-        # Mix and insert the fresh solver results directly into the current active datasets
-        sigma_group["data"][...] = sigma_in + mixing * sigma_add_ao
-        fs[f"{new_iter_key}/Sigma1"][...] = sigma_inf_in + mixing * sigma_inf_add_ao
-        
+    
 def main():
     ap = proc.build_argparser()
     ap.add_argument("--transform-file", type=Path, required=True)
